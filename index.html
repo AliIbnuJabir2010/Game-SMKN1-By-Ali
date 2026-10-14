@@ -1,0 +1,4681 @@
+<!doctype html>
+<html lang="id">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#0b0f14" />
+    <meta name="color-scheme" content="dark" />
+    <title>Kuis Kelas — Prototype</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Patrick+Hand&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --chalk: #1d3b66;
+        --amber: #ffd98a;
+        --ink: #0b0f14;
+        --glass: rgba(16, 20, 26, 0.58);
+        --glass-hi: rgba(26, 32, 40, 0.82);
+        --line: rgba(255, 255, 255, 0.16);
+        --hand:
+          "Patrick Hand", "Segoe Print", "Bradley Hand", "Chalkboard SE",
+          "Comic Sans MS", cursive;
+        --ui:
+          system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial,
+          sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+        -webkit-tap-highlight-color: transparent;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #000;
+        overflow: hidden;
+        overscroll-behavior: none;
+        font-family: var(--ui);
+        color: #fff;
+        touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+
+      .stage {
+        position: fixed;
+        inset: 0;
+        overflow: hidden;
+        background: #0b0f14;
+      }
+      #world {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: block;
+      }
+
+      /* ---------- lapisan sinematik ---------- */
+      .vignette {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 2;
+        background: radial-gradient(
+          ellipse at 50% 42%,
+          transparent 52%,
+          rgba(0, 0, 0, 0.52) 100%
+        );
+      }
+      .dusk {
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        z-index: 3;
+        opacity: 0;
+        transition: opacity 3.5s ease;
+        background: linear-gradient(
+          180deg,
+          rgba(255, 170, 80, 0.1),
+          rgba(255, 110, 40, 0.24)
+        );
+      }
+      .stage.dusk-on .dusk {
+        opacity: 1;
+      }
+      .bar {
+        position: absolute;
+        left: 0;
+        right: 0;
+        height: 0;
+        background: #000;
+        z-index: 4;
+        pointer-events: none;
+        transition: height 1.1s cubic-bezier(0.6, 0, 0.2, 1);
+      }
+      .bar.t {
+        top: 0;
+      }
+      .bar.b {
+        bottom: 0;
+      }
+      .stage.cinema .bar {
+        height: max(7vh, 28px);
+      }
+      .intro {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        z-index: 9;
+        pointer-events: none;
+        animation: introOut 1.8s 0.15s ease forwards;
+      }
+      @keyframes introOut {
+        to {
+          opacity: 0;
+        }
+      }
+
+      /* ---------- papan tulis ---------- */
+      .chalk {
+        font-family: var(--hand);
+        font-size: 40px;
+        fill: var(--chalk);
+        text-anchor: middle;
+        opacity: 0;
+        animation: chalkIn 1s ease forwards;
+      }
+      .chalk.l1 {
+        animation-delay: 0.9s;
+      }
+      .chalk.l2 {
+        animation-delay: 1.7s;
+      }
+      .chalk.l3 {
+        animation-delay: 2.5s;
+      }
+      @keyframes chalkIn {
+        from {
+          opacity: 0;
+        }
+        to {
+          opacity: 0.95;
+        }
+      }
+
+      /* ---------- jari mengetuk meja ---------- */
+      .fg {
+        transform-box: fill-box;
+      }
+      .stage.tapping .fg {
+        animation: tap 0.64s ease-in-out infinite;
+      }
+      .stage.tapping .fg:nth-child(2) {
+        animation-delay: 0.14s;
+      }
+      .stage.tapping .fg:nth-child(3) {
+        animation-delay: 0.28s;
+      }
+      .stage.tapping .fg:nth-child(4) {
+        animation-delay: 0.42s;
+      }
+      @keyframes tap {
+        0%,
+        100% {
+          transform: translateY(0);
+        }
+        45% {
+          transform: translateY(7px);
+        }
+      }
+
+      /* ---------- UI ---------- */
+      .choices {
+        position: absolute;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 5;
+        padding: 56px 14px calc(16px + env(safe-area-inset-bottom));
+        background: linear-gradient(
+          to top,
+          rgba(4, 6, 9, 0.78),
+          rgba(4, 6, 9, 0.34) 55%,
+          transparent
+        );
+        opacity: 0;
+        transform: translateY(18px);
+        pointer-events: none;
+        transition:
+          opacity 0.55s ease,
+          transform 0.55s ease;
+      }
+      .choices.show {
+        opacity: 1;
+        transform: none;
+        pointer-events: auto;
+      }
+      .row {
+        display: grid;
+        gap: 10px;
+        max-width: 980px;
+        margin: 0 auto;
+      }
+      @media (min-width: 760px) {
+        .row {
+          grid-template-columns: repeat(3, 1fr);
+          gap: 14px;
+        }
+      }
+
+      .choice {
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--glass);
+        color: #f6f3ea;
+        -webkit-backdrop-filter: blur(10px) saturate(1.2);
+        backdrop-filter: blur(10px) saturate(1.2);
+        border-radius: 14px;
+        padding: 14px 16px;
+        display: flex;
+        align-items: center;
+        gap: 14px;
+        font: 600 clamp(16px, 2.3vw, 19px)/1.25 var(--ui);
+        text-align: left;
+        cursor: pointer;
+        min-height: 56px;
+        transition:
+          transform 0.2s ease,
+          background 0.2s ease,
+          border-color 0.2s ease;
+      }
+      .choices.show .choice {
+        animation: rise 0.6s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+      }
+      .choices.show .choice:nth-child(2) {
+        animation-delay: 0.09s;
+      }
+      .choices.show .choice:nth-child(3) {
+        animation-delay: 0.18s;
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translateY(16px);
+        }
+      }
+      .choice .k {
+        flex: none;
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        display: grid;
+        place-items: center;
+        border: 1.5px dashed rgba(255, 217, 138, 0.75);
+        color: var(--amber);
+        font: 400 20px/1 var(--hand);
+      }
+      .choice:hover {
+        transform: translateY(-3px);
+        background: var(--glass-hi);
+        border-color: rgba(255, 217, 138, 0.65);
+      }
+      .choice:active {
+        transform: scale(0.98);
+      }
+      .choice:focus-visible,
+      .back:focus-visible {
+        outline: 2px solid var(--amber);
+        outline-offset: 3px;
+      }
+
+      .caption {
+        position: absolute;
+        left: 50%;
+        bottom: calc(max(7vh, 28px) + 76px + env(safe-area-inset-bottom));
+        z-index: 5;
+        transform: translate(-50%, 10px);
+        opacity: 0;
+        pointer-events: none;
+        max-width: 88vw;
+        text-align: center;
+        padding: 10px 20px;
+        border-radius: 26px;
+        background: rgba(10, 12, 16, 0.56);
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        border: 1px solid var(--line);
+        font: 400 clamp(19px, 3.2vw, 26px)/1.25 var(--hand);
+        letter-spacing: 0.3px;
+        color: #fff;
+        transition:
+          opacity 0.8s ease,
+          transform 0.8s ease;
+      }
+      .caption.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+      }
+
+      .back {
+        position: absolute;
+        left: 50%;
+        bottom: calc(max(7vh, 28px) + 14px + env(safe-area-inset-bottom));
+        z-index: 5;
+        transform: translate(-50%, 10px);
+        opacity: 0;
+        pointer-events: none;
+        appearance: none;
+        border: 1px solid var(--line);
+        background: var(--glass);
+        color: #f6f3ea;
+        cursor: pointer;
+        -webkit-backdrop-filter: blur(10px);
+        backdrop-filter: blur(10px);
+        border-radius: 999px;
+        padding: 12px 22px;
+        min-height: 48px;
+        font: 600 15px/1 var(--ui);
+        transition:
+          opacity 0.6s ease,
+          transform 0.6s ease,
+          background 0.2s ease,
+          border-color 0.2s ease;
+      }
+      .back.show {
+        opacity: 1;
+        transform: translate(-50%, 0);
+        pointer-events: auto;
+      }
+      .back:hover {
+        background: var(--glass-hi);
+        border-color: rgba(255, 217, 138, 0.65);
+      }
+
+      /* ---------- adegan gerbang (datar, dua warna) ---------- */
+      #gate {
+        position: absolute;
+        inset: 0;
+        width: 100%;
+        height: 100%;
+        display: none;
+      }
+      .stage.in-gate #gate {
+        display: block;
+      }
+      .stage.in-gate #world {
+        display: none;
+      }
+      .stage.in-gate .vignette {
+        opacity: 0;
+      }
+      .choices.flat {
+        background: none;
+      }
+      .askwrap {
+        text-align: center;
+        margin: 0 auto 14px;
+      }
+      .ask {
+        display: inline-block;
+        max-width: 92vw;
+        padding: 9px 22px;
+        border-radius: 999px;
+        background: rgba(10, 12, 16, 0.74);
+        border: 1px solid var(--line);
+        font: 400 clamp(22px, 3.6vw, 30px)/1.25 var(--hand);
+        color: #fff;
+      }
+      .fade {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        z-index: 8;
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 1s ease;
+      }
+      .fade.on {
+        opacity: 1;
+      }
+      .card {
+        position: absolute;
+        inset: 0;
+        z-index: 9;
+        display: grid;
+        place-content: center;
+        text-align: center;
+        pointer-events: none;
+        opacity: 0;
+        transition: opacity 0.9s ease;
+        padding: 0 8vw;
+        font: 400 clamp(28px, 5.4vw, 48px)/1.3 var(--hand);
+        color: var(--amber);
+      }
+      .card.show {
+        opacity: 1;
+      }
+      .card small {
+        display: block;
+        margin-top: 12px;
+        font: 400 clamp(18px, 3vw, 26px)/1.35 var(--hand);
+        color: #f3f5ec;
+        opacity: 0.85;
+      }
+
+      /* ---------- kartu karakter dari Bu Guru ---------- */
+      .reveal {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        place-items: center;
+        padding: 14px;
+        background: rgba(6, 8, 12, 0.62);
+        opacity: 0;
+        pointer-events: none;
+        perspective: 1600px;
+        transition: opacity 0.8s ease;
+      }
+      .reveal.show {
+        opacity: 1;
+        pointer-events: auto;
+      }
+      .flip {
+        display: grid;
+        width: min(94vw, 520px);
+        transform-style: preserve-3d;
+        transition: transform 1.3s cubic-bezier(0.3, 0.7, 0.2, 1);
+      }
+      .reveal.flipped .flip {
+        transform: rotateY(180deg);
+      }
+      .face {
+        grid-area: 1/1;
+        border-radius: 22px;
+        background: #f6efdc;
+        color: #1f2d3d;
+        border: 4px solid #1f2d3d;
+        box-shadow:
+          0 0 0 6px #f2b04c,
+          0 26px 64px rgba(0, 0, 0, 0.55);
+        -webkit-backface-visibility: hidden;
+        backface-visibility: hidden;
+      }
+      .face.front {
+        display: grid;
+        place-content: center;
+        gap: 6px;
+        text-align: center;
+        min-height: 300px;
+      }
+      .face.front span {
+        font: 400 clamp(120px, 32vw, 200px)/1 var(--hand);
+        color: #f2b04c;
+        text-shadow: 0 4px 0 #1f2d3d;
+      }
+      .face.front small {
+        font: 400 clamp(20px, 4vw, 26px)/1.2 var(--hand);
+      }
+      .face.rear {
+        transform: rotateY(180deg);
+      }
+      .scroll {
+        max-height: min(82vh, 700px);
+        overflow-y: auto;
+        padding: 22px 22px 24px;
+        touch-action: pan-y;
+        overscroll-behavior: contain;
+      }
+      .kicker {
+        font: 600 12px/1 var(--ui);
+        letter-spacing: 0.14em;
+        text-transform: uppercase;
+        color: #8a6a2c;
+      }
+      .face h2 {
+        margin: 8px 0 2px;
+        font: 400 clamp(32px, 7.4vw, 46px)/1.1 var(--hand);
+        color: #1f2d3d;
+      }
+      .face .sub {
+        margin: 0 0 14px;
+        font: 400 clamp(17px, 3.4vw, 21px)/1.3 var(--hand);
+        color: #55606c;
+      }
+      .trait {
+        display: grid;
+        grid-template-columns: 150px 1fr;
+        align-items: center;
+        gap: 10px;
+        margin: 8px 0;
+        font: 400 clamp(17px, 3.4vw, 20px)/1 var(--hand);
+      }
+      .trait i {
+        display: block;
+        height: 14px;
+        border-radius: 99px;
+        background: rgba(31, 45, 61, 0.14);
+        overflow: hidden;
+      }
+      .trait b {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 99px;
+        background: #f2b04c;
+        box-shadow: inset 0 0 0 2px #1f2d3d;
+        transition: width 1.1s cubic-bezier(0.2, 0.8, 0.2, 1);
+      }
+      .note {
+        margin-top: 16px;
+        padding: 14px 16px;
+        border: 2px dashed #1f2d3d;
+        border-radius: 14px;
+        background: rgba(242, 176, 76, 0.18);
+      }
+      .note b {
+        font: 600 12px/1 var(--ui);
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
+        color: #8a6a2c;
+      }
+      .note p {
+        margin: 8px 0 0;
+        font: 400 clamp(19px, 3.6vw, 23px)/1.35 var(--hand);
+      }
+      .again2 {
+        appearance: none;
+        display: block;
+        margin: 18px auto 0;
+        border: 3px solid #1f2d3d;
+        background: #f2b04c;
+        color: #1f2d3d;
+        border-radius: 999px;
+        padding: 12px 26px;
+        min-height: 48px;
+        font: 600 16px/1 var(--ui);
+        cursor: pointer;
+        transition: transform 0.2s ease;
+      }
+      .again2:hover {
+        transform: translateY(-2px);
+      }
+      .again2:focus-visible {
+        outline: 2px solid #1f2d3d;
+        outline-offset: 3px;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        .flip,
+        .trait b,
+        .reveal {
+          transition-duration: 0.01s;
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .stage.tapping .fg {
+          animation: none;
+        }
+        .intro {
+          animation-duration: 0.4s;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main class="stage in-gate" id="stage">
+      <svg
+        id="world"
+        viewBox="0 0 1600 1000"
+        preserveAspectRatio="xMidYMid slice"
+        role="img"
+        aria-label="Suasana kelas dari belakang seorang murid yang menghadap papan tulis"
+      >
+        <defs>
+          <linearGradient id="ceilG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#bdb6a1" />
+            <stop offset="1" stop-color="#d8d1bd" />
+          </linearGradient>
+          <linearGradient id="coveG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#000" stop-opacity=".22" />
+            <stop offset="1" stop-color="#000" stop-opacity="0" />
+          </linearGradient>
+          <linearGradient id="wallG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#f1e9d3" />
+            <stop offset="1" stop-color="#e2d9be" />
+          </linearGradient>
+          <linearGradient id="dadoG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#a8c1ae" />
+            <stop offset="1" stop-color="#8fab98" />
+          </linearGradient>
+          <linearGradient id="floorG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#d2cab7" />
+            <stop offset="1" stop-color="#9b9380" />
+          </linearGradient>
+          <linearGradient id="floorShade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#000" stop-opacity="0" />
+            <stop offset="1" stop-color="#000" stop-opacity=".35" />
+          </linearGradient>
+          <linearGradient id="boardG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0" stop-color="#fcfcf9" />
+            <stop offset="1" stop-color="#e4e6e1" />
+          </linearGradient>
+          <linearGradient id="deskG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#dcba88" />
+            <stop offset="1" stop-color="#bf9862" />
+          </linearGradient>
+          <linearGradient id="shirtShade" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#fff" stop-opacity="0" />
+            <stop offset="1" stop-color="#5a6e8c" stop-opacity=".26" />
+          </linearGradient>
+          <linearGradient id="foldG" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0" stop-color="#000" stop-opacity="0" />
+            <stop offset=".5" stop-color="#000" stop-opacity=".22" />
+            <stop offset="1" stop-color="#000" stop-opacity="0" />
+          </linearGradient>
+          <linearGradient id="skyG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="#6ec3f4" />
+            <stop offset="1" stop-color="#e3f5fd" />
+          </linearGradient>
+          <radialGradient id="sunG">
+            <stop offset="0" stop-color="#fff" stop-opacity=".95" />
+            <stop offset="1" stop-color="#fff" stop-opacity="0" />
+          </radialGradient>
+          <linearGradient
+            id="beamG"
+            gradientUnits="userSpaceOnUse"
+            x1="330"
+            y1="300"
+            x2="760"
+            y2="620"
+          >
+            <stop offset="0" stop-color="#fff6cf" stop-opacity=".34" />
+            <stop offset="1" stop-color="#fff6cf" stop-opacity="0" />
+          </linearGradient>
+          <clipPath id="winClip">
+            <rect x="96" y="156" width="228" height="288" />
+          </clipPath>
+
+          <!-- meja murid (titik asal = pusat kepala murid) -->
+          <g id="deskShape">
+            <polygon
+              points="-380,-90 380,-90 480,100 -480,100"
+              fill="url(#deskG)"
+            />
+            <path
+              d="M-300 -58 L300 -58 M-350 -8 L350 -8 M-410 44 L410 44"
+              stroke="#8f6a3e"
+              stroke-opacity=".13"
+              stroke-width="3"
+              fill="none"
+            />
+            <polygon
+              points="-380,-90 380,-90 480,100 -480,100"
+              fill="none"
+              stroke="#a98154"
+              stroke-width="3"
+            />
+            <line
+              x1="-380"
+              y1="-88"
+              x2="380"
+              y2="-88"
+              stroke="#f3e0b9"
+              stroke-width="3"
+            />
+          </g>
+
+          <!-- badan murid dari belakang -->
+          <g id="kidBody">
+            <path
+              d="M-300 330 C-300 200 -215 112 -82 96 L82 96 C215 112 300 200 300 330 Z"
+              fill="#f3f5f8"
+            />
+            <path
+              d="M-300 330 C-300 200 -215 112 -82 96 L82 96 C215 112 300 200 300 330 Z"
+              fill="url(#shirtShade)"
+            />
+            <path
+              d="M-130 190 Q-96 232 -118 270 M130 190 Q96 232 118 270 M0 134 L0 258"
+              stroke="#8d9aa8"
+              stroke-opacity=".3"
+              stroke-width="3"
+              fill="none"
+              stroke-linecap="round"
+            />
+            <rect x="-300" y="258" width="600" height="72" fill="#767c84" />
+            <rect x="-300" y="254" width="600" height="8" fill="#4b5058" />
+          </g>
+          <g id="chair">
+            <rect x="-212" y="372" width="18" height="150" fill="#5b3b23" />
+            <rect x="194" y="372" width="18" height="150" fill="#5b3b23" />
+            <rect
+              x="-250"
+              y="318"
+              width="500"
+              height="64"
+              rx="22"
+              fill="#9a6238"
+            />
+            <rect
+              x="-236"
+              y="326"
+              width="472"
+              height="8"
+              rx="4"
+              fill="#c18a5c"
+              opacity=".7"
+            />
+          </g>
+          <g id="kidBoy">
+            <use href="#kidBody" />
+            <use href="#chair" />
+            <rect
+              x="-27"
+              y="50"
+              width="54"
+              height="58"
+              rx="10"
+              style="fill: var(--skin, #c08a5b)"
+            />
+            <path
+              d="M-52 92 Q0 126 52 92 L66 108 Q0 146 -66 108 Z"
+              fill="#fff"
+              stroke="#cfd6de"
+              stroke-width="2"
+            />
+            <ellipse
+              cx="-69"
+              cy="16"
+              rx="11"
+              ry="17"
+              style="fill: var(--skin, #c08a5b)"
+            />
+            <ellipse
+              cx="69"
+              cy="16"
+              rx="11"
+              ry="17"
+              style="fill: var(--skin, #c08a5b)"
+            />
+            <path
+              d="M-69 8 C-74 -52 -40 -80 0 -80 C40 -80 74 -52 69 8 C68 38 54 56 40 62 Q0 76 -40 62 C-54 56 -68 38 -69 8 Z"
+              style="fill: var(--hair, #16171c)"
+            />
+            <ellipse
+              cx="-22"
+              cy="-48"
+              rx="26"
+              ry="12"
+              fill="#fff"
+              opacity=".07"
+            />
+          </g>
+          <g id="kidGirl">
+            <use href="#kidBody" />
+            <use href="#chair" />
+            <path
+              d="M-92 6 C-98 -70 -48 -98 0 -98 C48 -98 98 -70 92 6 C94 56 150 84 176 150 C140 200 80 222 0 222 C-80 222 -140 200 -176 150 C-150 84 -94 56 -92 6 Z"
+              fill="#fbfbfc"
+              stroke="#cdd3db"
+              stroke-width="3"
+            />
+            <path
+              d="M-60 100 Q-30 160 -50 210 M60 100 Q30 160 50 210 M0 -90 Q-6 -20 0 60"
+              stroke="#cdd3db"
+              stroke-opacity=".8"
+              stroke-width="2.5"
+              fill="none"
+              stroke-linecap="round"
+            />
+          </g>
+        </defs>
+
+        <!-- ================= LATAR KELAS ================= -->
+        <g id="room">
+          <rect
+            x="-400"
+            y="-1600"
+            width="2400"
+            height="1480"
+            fill="url(#ceilG)"
+          />
+          <rect
+            x="460"
+            y="-330"
+            width="260"
+            height="14"
+            rx="6"
+            fill="#fffef2"
+          />
+          <rect
+            x="880"
+            y="-330"
+            width="260"
+            height="14"
+            rx="6"
+            fill="#fffef2"
+          />
+          <rect
+            x="-400"
+            y="-120"
+            width="2400"
+            height="840"
+            fill="url(#wallG)"
+          />
+          <rect
+            x="-400"
+            y="-120"
+            width="2400"
+            height="120"
+            fill="url(#coveG)"
+          />
+          <rect x="-400" y="500" width="2400" height="220" fill="url(#dadoG)" />
+          <rect x="-400" y="494" width="2400" height="9" fill="#7f9d8b" />
+
+          <!-- lantai -->
+          <rect
+            x="-400"
+            y="720"
+            width="2400"
+            height="1500"
+            fill="url(#floorG)"
+          />
+          <g
+            id="floorLines"
+            stroke="#3c321e"
+            stroke-opacity=".09"
+            stroke-width="2"
+          ></g>
+          <rect
+            x="-400"
+            y="720"
+            width="2400"
+            height="1500"
+            fill="url(#floorShade)"
+          />
+          <rect x="-400" y="706" width="2400" height="16" fill="#6d7f72" />
+
+          <!-- pintu -->
+          <g>
+            <rect x="1436" y="140" width="150" height="570" fill="#caa56f" />
+            <rect x="1448" y="152" width="126" height="558" fill="#9c6a3c" />
+            <rect x="1464" y="176" width="94" height="210" fill="#8a5b30" />
+            <rect x="1464" y="410" width="94" height="250" fill="#8a5b30" />
+            <circle cx="1470" cy="440" r="7" fill="#d8c27a" />
+          </g>
+
+          <!-- jendela -->
+          <g id="windowG">
+            <g clip-path="url(#winClip)">
+              <rect x="96" y="156" width="228" height="288" fill="url(#skyG)" />
+              <circle cx="272" cy="206" r="72" fill="url(#sunG)" />
+              <g fill="#fff" opacity=".88">
+                <g>
+                  <ellipse cx="150" cy="232" rx="38" ry="12" />
+                  <ellipse cx="176" cy="224" rx="26" ry="14" />
+                  <animateTransform
+                    attributeName="transform"
+                    type="translate"
+                    values="-30 0;40 0;-30 0"
+                    dur="60s"
+                    repeatCount="indefinite"
+                  />
+                </g>
+                <g>
+                  <ellipse cx="262" cy="270" rx="30" ry="9" />
+                  <ellipse cx="280" cy="264" rx="18" ry="10" />
+                  <animateTransform
+                    attributeName="transform"
+                    type="translate"
+                    values="20 0;-40 0;20 0"
+                    dur="75s"
+                    repeatCount="indefinite"
+                  />
+                </g>
+              </g>
+              <path
+                d="M96 404 Q150 364 210 394 T324 384 L324 444 L96 444 Z"
+                fill="#8fc08a"
+              />
+              <rect x="120" y="348" width="74" height="64" fill="#ece4d2" />
+              <polygon points="112,348 157,324 202,348" fill="#b5523a" />
+              <g fill="#7ba7c4">
+                <rect x="130" y="362" width="14" height="16" />
+                <rect x="152" y="362" width="14" height="16" />
+                <rect x="174" y="362" width="14" height="16" />
+              </g>
+              <rect x="96" y="418" width="228" height="30" fill="#6fb35a" />
+              <rect x="262" y="352" width="10" height="90" fill="#6b4a2d" />
+              <g>
+                <circle cx="267" cy="332" r="38" fill="#3f8f4a" />
+                <circle cx="244" cy="352" r="28" fill="#4aa055" />
+                <circle cx="291" cy="354" r="28" fill="#3b8644" />
+                <animateTransform
+                  attributeName="transform"
+                  type="rotate"
+                  values="-1.6 267 440;1.6 267 440;-1.6 267 440"
+                  dur="4.5s"
+                  repeatCount="indefinite"
+                />
+              </g>
+              <path
+                d="M-7 0 Q-3.5 -6 0 0 Q3.5 -6 7 0"
+                stroke="#34404a"
+                stroke-width="1.8"
+                fill="none"
+                stroke-linecap="round"
+              >
+                <animateMotion
+                  path="M 96 236 C 160 176, 240 206, 330 168"
+                  dur="8s"
+                  repeatCount="indefinite"
+                />
+              </path>
+              <polygon
+                points="96,156 190,156 96,300"
+                fill="#fff"
+                opacity=".12"
+              />
+            </g>
+            <rect
+              x="90"
+              y="150"
+              width="240"
+              height="300"
+              fill="none"
+              stroke="#dcd6c4"
+              stroke-width="12"
+            />
+            <line
+              x1="210"
+              y1="156"
+              x2="210"
+              y2="444"
+              stroke="#e8e3d3"
+              stroke-width="8"
+            />
+            <line
+              x1="96"
+              y1="300"
+              x2="324"
+              y2="300"
+              stroke="#e8e3d3"
+              stroke-width="8"
+            />
+            <rect
+              x="78"
+              y="450"
+              width="264"
+              height="14"
+              rx="3"
+              fill="#c9c2ad"
+            />
+          </g>
+
+          <!-- dinding panel kayu di belakang papan -->
+          <g>
+            <rect x="396" y="96" width="101" height="404" fill="#4b3426" />
+            <rect x="497" y="96" width="101" height="404" fill="#563a2a" />
+            <rect x="598" y="96" width="101" height="404" fill="#47301f" />
+            <rect x="699" y="96" width="101" height="404" fill="#5a3d2c" />
+            <rect x="800" y="96" width="101" height="404" fill="#4a3325" />
+            <rect x="901" y="96" width="101" height="404" fill="#53392a" />
+            <rect x="1002" y="96" width="101" height="404" fill="#46301f" />
+            <rect x="1103" y="96" width="101" height="404" fill="#5a3e2d" />
+            <g stroke="#2a1b11" stroke-opacity=".55" stroke-width="2">
+              <line x1="497" y1="96" x2="497" y2="500" />
+              <line x1="598" y1="96" x2="598" y2="500" />
+              <line x1="699" y1="96" x2="699" y2="500" />
+              <line x1="800" y1="96" x2="800" y2="500" />
+              <line x1="901" y1="96" x2="901" y2="500" />
+              <line x1="1002" y1="96" x2="1002" y2="500" />
+              <line x1="1103" y1="96" x2="1103" y2="500" />
+            </g>
+            <rect
+              x="396"
+              y="96"
+              width="808"
+              height="404"
+              fill="url(#coveG)"
+              opacity=".5"
+            />
+          </g>
+
+          <!-- papan tulis putih -->
+          <g id="boardG2">
+            <rect
+              x="432"
+              y="140"
+              width="736"
+              height="334"
+              rx="4"
+              fill="#000"
+              opacity=".22"
+            />
+            <rect x="436" y="126" width="728" height="12" fill="#f3f1ea" />
+            <rect
+              x="436"
+              y="136"
+              width="728"
+              height="3"
+              fill="#000"
+              opacity=".18"
+            />
+            <rect
+              x="436"
+              y="138"
+              width="728"
+              height="316"
+              rx="3"
+              fill="#b9bec3"
+            />
+            <rect
+              x="444"
+              y="146"
+              width="712"
+              height="300"
+              fill="url(#boardG)"
+            />
+            <polygon
+              points="444,146 690,146 560,446 444,446"
+              fill="#fff"
+              opacity=".35"
+            />
+            <g fill="#8a8f98" opacity=".09">
+              <ellipse
+                cx="640"
+                cy="262"
+                rx="120"
+                ry="14"
+                transform="rotate(-6 640 262)"
+              />
+              <ellipse
+                cx="930"
+                cy="362"
+                rx="150"
+                ry="12"
+                transform="rotate(4 930 362)"
+              />
+              <ellipse cx="760" cy="420" rx="200" ry="10" />
+            </g>
+            <rect
+              x="436"
+              y="452"
+              width="728"
+              height="12"
+              rx="2"
+              fill="#9ea4aa"
+            />
+            <rect x="436" y="452" width="728" height="3" fill="#d4d8dc" />
+            <rect x="500" y="441" width="46" height="9" rx="4" fill="#1d3b66" />
+            <rect x="556" y="441" width="46" height="9" rx="4" fill="#c8282d" />
+            <rect
+              x="1040"
+              y="436"
+              width="64"
+              height="14"
+              rx="3"
+              fill="#3a3a3f"
+            />
+            <text
+              x="488"
+              y="196"
+              font-family="'Patrick Hand','Segoe Print','Comic Sans MS',cursive"
+              font-size="20"
+              fill="#1d3b66"
+              opacity=".22"
+              transform="rotate(-2 488 196)"
+            >
+              x² + 5x + 6 = 0
+            </text>
+            <text
+              x="1070"
+              y="428"
+              font-family="'Patrick Hand','Segoe Print','Comic Sans MS',cursive"
+              font-size="18"
+              fill="#1d3b66"
+              opacity=".2"
+              transform="rotate(1.5 1070 428)"
+            >
+              (x+2)(x+3)
+            </text>
+            <text class="chalk l1" x="800" y="252">
+              Kamu diberi tugas oleh guru
+            </text>
+            <text class="chalk l2" x="800" y="304">
+              dan harus dikumpulkan besok.
+            </text>
+            <text class="chalk l3" x="800" y="378">Apa yang kamu lakukan?</text>
+          </g>
+
+          <!-- jam dinding -->
+          <g id="clockG">
+            <circle cx="1372" cy="256" r="72" fill="#1f2328" />
+            <circle cx="1372" cy="256" r="64" fill="#faf8f1" />
+            <g
+              id="ticks"
+              stroke="#2a2d31"
+              stroke-width="3"
+              stroke-linecap="round"
+            ></g>
+            <g
+              font-family="'Patrick Hand','Segoe UI',Arial,sans-serif"
+              font-size="17"
+              fill="#2a2d31"
+              text-anchor="middle"
+            >
+              <text x="1372" y="219">12</text>
+              <text x="1411" y="262">3</text>
+              <text x="1372" y="304">6</text>
+              <text x="1333" y="262">9</text>
+            </g>
+            <line
+              id="hHand"
+              x1="1372"
+              y1="256"
+              x2="1372"
+              y2="226"
+              stroke="#1f2328"
+              stroke-width="5.5"
+              stroke-linecap="round"
+            />
+            <line
+              id="mHand"
+              x1="1372"
+              y1="262"
+              x2="1372"
+              y2="208"
+              stroke="#1f2328"
+              stroke-width="3.5"
+              stroke-linecap="round"
+            />
+            <line
+              id="sHand"
+              x1="1372"
+              y1="268"
+              x2="1372"
+              y2="202"
+              stroke="#c8282d"
+              stroke-width="1.8"
+              stroke-linecap="round"
+            />
+            <circle cx="1372" cy="256" r="4.5" fill="#c8282d" />
+          </g>
+
+          <!-- meja guru -->
+          <g>
+            <rect x="708" y="494" width="58" height="26" fill="#3b6ea5" />
+            <rect x="712" y="478" width="50" height="16" fill="#c8553d" />
+            <rect x="770" y="500" width="46" height="20" fill="#e0b23c" />
+            <rect
+              x="872"
+              y="500"
+              width="22"
+              height="20"
+              rx="4"
+              fill="#f2f2f2"
+            />
+            <polygon points="650,520 950,520 976,550 624,550" fill="#c9a06a" />
+            <rect x="632" y="550" width="336" height="100" fill="#a87d4c" />
+            <rect x="632" y="550" width="336" height="6" fill="#8a6338" />
+          </g>
+
+          <!-- murid lain di barisan depan -->
+          <g>
+            <use href="#deskShape" transform="translate(250 612) scale(.56)" />
+            <use href="#kidGirl" transform="translate(250 612) scale(.56)" />
+            <use href="#deskShape" transform="translate(1350 612) scale(.56)" />
+            <use
+              href="#kidBoy"
+              transform="translate(1350 612) scale(.56)"
+              style="--hair: #2d1c12"
+            />
+          </g>
+
+          <!-- berkas cahaya & debu -->
+          <polygon
+            points="330,166 330,440 700,640 520,250"
+            fill="url(#beamG)"
+          />
+          <g fill="#fff" opacity=".7">
+            <circle cx="420" cy="300" r="1.8">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 0;12 -30;0 0"
+                dur="7s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle cx="470" cy="380" r="1.5">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 0;-10 -26;0 0"
+                dur="9s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle cx="540" cy="330" r="2">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 0;14 -24;0 0"
+                dur="8s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle cx="600" cy="470" r="1.6">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 0;-12 -34;0 0"
+                dur="10s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle cx="380" cy="420" r="1.4">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 0;10 -22;0 0"
+                dur="6.5s"
+                repeatCount="indefinite"
+              />
+            </circle>
+            <circle cx="660" cy="560" r="1.7">
+              <animateTransform
+                attributeName="transform"
+                type="translate"
+                values="0 0;-8 -30;0 0"
+                dur="8.5s"
+                repeatCount="indefinite"
+              />
+            </circle>
+          </g>
+        </g>
+
+        <!-- ================= MEJA & BUKU MURID ================= -->
+        <use href="#deskShape" transform="translate(800 690)" />
+        <g id="bookWrap">
+          <g id="book">
+            <polygon
+              points="708,604 1110,608 1130,752 696,754"
+              fill="#2a4a8c"
+            />
+            <polygon
+              points="708,604 1110,608 1130,752 696,754"
+              fill="none"
+              stroke="#1b2f5e"
+              stroke-width="2"
+            />
+            <polygon points="724,612 910,608 910,738 710,742" fill="#fbf8ec" />
+            <polygon
+              points="910,608 1096,613 1112,742 910,738"
+              fill="#fffdf4"
+            />
+            <polygon
+              points="888,608 932,609 932,738 888,739"
+              fill="url(#foldG)"
+            />
+            <g stroke="#a9c3df" stroke-width="1.3">
+              <line x1="730" y1="640" x2="902" y2="639" />
+              <line x1="727" y1="660" x2="902" y2="659" />
+              <line x1="724" y1="680" x2="902" y2="679" />
+              <line x1="721" y1="700" x2="902" y2="699" />
+              <line x1="718" y1="720" x2="902" y2="719" />
+              <line x1="918" y1="640" x2="1094" y2="641" />
+              <line x1="918" y1="660" x2="1098" y2="661" />
+              <line x1="918" y1="680" x2="1101" y2="681" />
+              <line x1="918" y1="700" x2="1104" y2="701" />
+              <line x1="918" y1="720" x2="1107" y2="721" />
+            </g>
+            <line
+              x1="942"
+              y1="610"
+              x2="942"
+              y2="738"
+              stroke="#f0a5a5"
+              stroke-width="1.3"
+            />
+            <line
+              x1="746"
+              y1="611"
+              x2="744"
+              y2="740"
+              stroke="#f0a5a5"
+              stroke-width="1.3"
+            />
+          </g>
+          <g
+            id="ink"
+            fill="none"
+            stroke="#1f3fa8"
+            stroke-width="2.3"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            opacity=".92"
+          ></g>
+        </g>
+
+        <!-- ================= ULANGAN: KERTAS ================= -->
+        <g id="examG" style="display: none">
+          <g id="paperMine">
+            <polygon
+              points="790,606 1086,608 1102,762 774,766"
+              fill="#fffdf4"
+              stroke="#cfc9b3"
+              stroke-width="1.5"
+            />
+            <g
+              font-family="'Patrick Hand','Segoe Print','Comic Sans MS',cursive"
+              fill="#2b3038"
+            >
+              <text x="808" y="634" font-size="14">ULANGAN MATEMATIKA</text>
+              <text x="808" y="664" font-size="19">1. x² + 5x + 6 = 0</text>
+              <text x="808" y="696" font-size="14">Jawab:</text>
+            </g>
+            <line
+              x1="806"
+              y1="729"
+              x2="1040"
+              y2="730"
+              stroke="#a9c3df"
+              stroke-width="1.3"
+            />
+            <g id="examInk"></g>
+            <g id="gradeG" opacity="0"></g>
+            <g id="gradeScore" opacity="0"></g>
+          </g>
+          <g id="paperFriend">
+            <polygon
+              points="1396,626 1508,626 1522,668 1384,668"
+              fill="#fffdf4"
+              stroke="#cfc9b3"
+              stroke-width="1"
+            />
+            <text
+              x="1402"
+              y="639"
+              font-size="8"
+              fill="#2b3038"
+              font-family="'Patrick Hand','Segoe Print','Comic Sans MS',cursive"
+            >
+              1. x² + 5x + 6 = 0
+            </text>
+            <text
+              x="1402"
+              y="658"
+              font-size="11"
+              fill="#1f3fa8"
+              font-family="'Patrick Hand','Segoe Print','Comic Sans MS',cursive"
+            >
+              x = 2 atau x = 3
+            </text>
+          </g>
+        </g>
+
+        <!-- ================= MURID (parallax) ================= -->
+        <g id="studentBody">
+          <use href="#kidBoy" transform="translate(800 690)" />
+        </g>
+
+        <!-- ================= LENGAN, TANGAN, PULPEN ================= -->
+        <g id="arms" stroke-linecap="round" stroke-linejoin="round">
+          <!-- lengan bawah -->
+          <line id="foreLo" stroke="#a9703f" stroke-width="44" />
+          <line id="foreLi" stroke="#c48b5c" stroke-width="37" />
+          <line id="foreRo" stroke="#a9703f" stroke-width="44" />
+          <line id="foreRi" stroke="#c48b5c" stroke-width="37" />
+
+          <!-- lengan baju (ikut parallax) -->
+          <g id="sleeves">
+            <line
+              x1="580"
+              y1="840"
+              x2="500"
+              y2="885"
+              stroke="#cfd6de"
+              stroke-width="80"
+            />
+            <line
+              x1="580"
+              y1="840"
+              x2="500"
+              y2="885"
+              stroke="#f3f5f8"
+              stroke-width="74"
+            />
+            <line
+              x1="1020"
+              y1="840"
+              x2="1100"
+              y2="885"
+              stroke="#cfd6de"
+              stroke-width="80"
+            />
+            <line
+              x1="1020"
+              y1="840"
+              x2="1100"
+              y2="885"
+              stroke="#f3f5f8"
+              stroke-width="74"
+            />
+          </g>
+
+          <!-- tangan kiri -->
+          <g id="handLg">
+            <ellipse
+              id="handLs"
+              cx="688"
+              cy="694"
+              rx="30"
+              ry="24"
+              fill="#c48b5c"
+              stroke="#a9703f"
+              stroke-width="2"
+            />
+            <g stroke="#c48b5c" stroke-width="11" fill="none">
+              <line class="fg" x1="673" y1="686" x2="673" y2="664" />
+              <line class="fg" x1="685" y1="684" x2="685" y2="660" />
+              <line class="fg" x1="697" y1="684" x2="697" y2="662" />
+              <line class="fg" x1="709" y1="686" x2="709" y2="668" />
+            </g>
+          </g>
+
+          <!-- tangan kanan + pulpen -->
+          <ellipse id="handShadow" rx="30" ry="22" fill="#000" opacity=".14" />
+          <g id="penG" stroke-linecap="round">
+            <line
+              id="penShadow"
+              stroke="#000"
+              stroke-opacity=".2"
+              stroke-width="8"
+            />
+            <line id="penBody" stroke="#2c5fe0" stroke-width="8" />
+            <line id="penBand" stroke="#d5dae1" stroke-width="9" />
+            <line id="penTip" stroke="#15181d" stroke-width="5" />
+          </g>
+          <ellipse
+            id="handR"
+            rx="28"
+            ry="22"
+            fill="#c48b5c"
+            stroke="#a9703f"
+            stroke-width="2"
+          />
+          <circle
+            id="fingR"
+            r="13"
+            fill="#c48b5c"
+            stroke="#a9703f"
+            stroke-width="1.5"
+          />
+        </g>
+      </svg>
+
+      <svg
+        id="gate"
+        viewBox="0 0 1600 1000"
+        preserveAspectRatio="xMidYMid slice"
+        role="img"
+        aria-label="Gerbang sekolah. Seorang satpam menutup gerbang dan seorang murid datang terlambat"
+      >
+        <defs>
+          <g id="sleeveC">
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="44"
+              stroke="#1f2d3d"
+              stroke-width="13"
+              stroke-linecap="round"
+            />
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="44"
+              stroke="#f6efdc"
+              stroke-width="6.5"
+              stroke-linecap="round"
+            />
+            <circle
+              cx="0"
+              cy="50"
+              r="7"
+              fill="#f2b04c"
+              stroke="#1f2d3d"
+              stroke-width="2.5"
+            />
+          </g>
+          <g id="sleeveN">
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="46"
+              stroke="#1f2d3d"
+              stroke-width="15"
+              stroke-linecap="round"
+            />
+            <line
+              x1="0"
+              y1="0"
+              x2="0"
+              y2="46"
+              stroke="#f2b04c"
+              stroke-width="8.5"
+              stroke-linecap="round"
+            />
+            <circle
+              cx="0"
+              cy="52"
+              r="7.5"
+              fill="#f6efdc"
+              stroke="#1f2d3d"
+              stroke-width="2.5"
+            />
+          </g>
+          <!-- dompet cokelat (dipakai di koridor & di meja Bu Guru) -->
+          <g id="walletBills">
+            <g transform="rotate(-9 -10 -34)">
+              <rect
+                x="-30"
+                y="-52"
+                width="40"
+                height="24"
+                rx="3"
+                fill="#cfe5c4"
+                stroke="#1f2d3d"
+                stroke-width="3"
+              />
+              <circle
+                cx="-10"
+                cy="-40"
+                r="6"
+                fill="none"
+                stroke="#1f2d3d"
+                stroke-width="2.5"
+              />
+            </g>
+            <g transform="rotate(8 14 -34)">
+              <rect
+                x="-6"
+                y="-56"
+                width="42"
+                height="26"
+                rx="3"
+                fill="#f6efdc"
+                stroke="#1f2d3d"
+                stroke-width="3"
+              />
+              <circle
+                cx="15"
+                cy="-43"
+                r="6"
+                fill="none"
+                stroke="#1f2d3d"
+                stroke-width="2.5"
+              />
+            </g>
+          </g>
+          <g id="walletBody">
+            <rect
+              x="-40"
+              y="-36"
+              width="80"
+              height="36"
+              rx="8"
+              fill="#9a6238"
+              stroke="#1f2d3d"
+              stroke-width="4"
+            />
+            <path
+              d="M-40 -22 H40"
+              stroke="#1f2d3d"
+              stroke-width="3.5"
+              opacity=".55"
+              fill="none"
+            />
+            <rect
+              x="-7"
+              y="-29"
+              width="14"
+              height="14"
+              rx="3"
+              fill="#f2b04c"
+              stroke="#1f2d3d"
+              stroke-width="3"
+            />
+          </g>
+        </defs>
+
+        <g id="gateScene">
+          <!-- latar: langit, matahari, awan -->
+          <rect x="-800" y="-600" width="3200" height="2400" fill="#e9f6fb" />
+          <circle cx="1290" cy="200" r="72" fill="#fbd36a" />
+          <g fill="#c2e3e8">
+            <circle cx="230" cy="170" r="34" />
+            <circle cx="272" cy="150" r="44" />
+            <circle cx="320" cy="176" r="30" />
+            <rect x="196" y="170" width="150" height="36" rx="18" />
+            <circle cx="1030" cy="130" r="26" />
+            <circle cx="1066" cy="114" r="34" />
+            <circle cx="1106" cy="136" r="24" />
+            <rect x="1004" y="132" width="124" height="30" rx="15" />
+            <circle cx="1450" cy="330" r="22" />
+            <circle cx="1482" cy="316" r="30" />
+            <rect x="1428" y="330" width="100" height="26" rx="13" />
+          </g>
+
+          <!-- pohon kiri -->
+          <rect x="151" y="414" width="16" height="236" fill="#7b3f2a" />
+          <circle cx="159" cy="380" r="84" fill="#86b13a" />
+          <circle cx="130" cy="364" r="42" fill="#b4d055" />
+          <circle cx="218" cy="410" r="40" fill="#6f9a2e" />
+
+          <!-- gedung sekolah -->
+          <g id="school">
+            <rect x="300" y="340" width="400" height="304" fill="#f2a33a" />
+            <rect x="900" y="340" width="400" height="304" fill="#f2a33a" />
+            <rect x="300" y="618" width="400" height="26" fill="#b34a35" />
+            <rect x="900" y="618" width="400" height="26" fill="#b34a35" />
+            <polygon points="276,342 326,284 700,284 700,342" fill="#d9372b" />
+            <polygon
+              points="900,284 1274,284 1324,342 900,342"
+              fill="#d9372b"
+            />
+            <polygon
+              points="900,284 1274,284 1290,304 900,304"
+              fill="#000"
+              opacity=".1"
+            />
+            <rect x="690" y="272" width="220" height="372" fill="#fbd36a" />
+            <rect x="680" y="262" width="240" height="26" fill="#d9372b" />
+            <polygon
+              points="720,226 800,198 880,226 880,262 720,262"
+              fill="#fff"
+              stroke="#f2a33a"
+              stroke-width="6"
+              stroke-linejoin="round"
+            />
+            <text
+              x="800"
+              y="256"
+              text-anchor="middle"
+              font-family="system-ui,Arial,sans-serif"
+              font-weight="800"
+              font-size="25"
+              fill="#d9372b"
+              letter-spacing="1"
+            >
+              SEKOLAH
+            </text>
+            <rect x="798" y="160" width="4" height="40" fill="#34404a" />
+            <polygon points="802,162 830,170 802,180" fill="#d9372b" />
+            <g>
+              <rect x="335" y="325" width="100" height="90" fill="#fff" />
+              <rect x="340" y="330" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="340,330 390,330 340,386"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="383.0" y="330" width="4" height="80" fill="#fff" />
+              <rect x="340" y="368.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="335" y="445" width="100" height="90" fill="#fff" />
+              <rect x="340" y="450" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="340,450 390,450 340,506"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="383.0" y="450" width="4" height="80" fill="#fff" />
+              <rect x="340" y="488.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="465" y="325" width="100" height="90" fill="#fff" />
+              <rect x="470" y="330" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="470,330 520,330 470,386"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="513.0" y="330" width="4" height="80" fill="#fff" />
+              <rect x="470" y="368.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="465" y="445" width="100" height="90" fill="#fff" />
+              <rect x="470" y="450" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="470,450 520,450 470,506"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="513.0" y="450" width="4" height="80" fill="#fff" />
+              <rect x="470" y="488.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="595" y="325" width="100" height="90" fill="#fff" />
+              <rect x="600" y="330" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="600,330 650,330 600,386"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="643.0" y="330" width="4" height="80" fill="#fff" />
+              <rect x="600" y="368.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="595" y="445" width="100" height="90" fill="#fff" />
+              <rect x="600" y="450" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="600,450 650,450 600,506"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="643.0" y="450" width="4" height="80" fill="#fff" />
+              <rect x="600" y="488.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="905" y="325" width="100" height="90" fill="#fff" />
+              <rect x="910" y="330" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="910,330 960,330 910,386"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="953.0" y="330" width="4" height="80" fill="#fff" />
+              <rect x="910" y="368.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="905" y="445" width="100" height="90" fill="#fff" />
+              <rect x="910" y="450" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="910,450 960,450 910,506"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="953.0" y="450" width="4" height="80" fill="#fff" />
+              <rect x="910" y="488.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="1035" y="325" width="100" height="90" fill="#fff" />
+              <rect x="1040" y="330" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="1040,330 1090,330 1040,386"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="1083.0" y="330" width="4" height="80" fill="#fff" />
+              <rect x="1040" y="368.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="1035" y="445" width="100" height="90" fill="#fff" />
+              <rect x="1040" y="450" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="1040,450 1090,450 1040,506"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="1083.0" y="450" width="4" height="80" fill="#fff" />
+              <rect x="1040" y="488.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="1165" y="325" width="100" height="90" fill="#fff" />
+              <rect x="1170" y="330" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="1170,330 1220,330 1170,386"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="1213.0" y="330" width="4" height="80" fill="#fff" />
+              <rect x="1170" y="368.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="1165" y="445" width="100" height="90" fill="#fff" />
+              <rect x="1170" y="450" width="90" height="80" fill="#5fb3d0" />
+              <polygon
+                points="1170,450 1220,450 1170,506"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="1213.0" y="450" width="4" height="80" fill="#fff" />
+              <rect x="1170" y="488.0" width="90" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="719" y="325" width="62" height="80" fill="#fff" />
+              <rect x="724" y="330" width="52" height="70" fill="#5fb3d0" />
+              <polygon
+                points="724,330 753,330 724,379"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="748.0" y="330" width="4" height="70" fill="#fff" />
+              <rect x="724" y="363.0" width="52" height="4" fill="#fff" />
+            </g>
+            <g>
+              <rect x="819" y="325" width="62" height="80" fill="#fff" />
+              <rect x="824" y="330" width="52" height="70" fill="#5fb3d0" />
+              <polygon
+                points="824,330 853,330 824,379"
+                fill="#9bd7ea"
+                opacity=".7"
+              />
+              <rect x="848.0" y="330" width="4" height="70" fill="#fff" />
+              <rect x="824" y="363.0" width="52" height="4" fill="#fff" />
+            </g>
+            <circle
+              cx="800"
+              cy="438"
+              r="22"
+              fill="#fff"
+              stroke="#d9372b"
+              stroke-width="5"
+            />
+            <path
+              d="M800 438 V424 M800 438 L810 444"
+              stroke="#1f2d3d"
+              stroke-width="3"
+              stroke-linecap="round"
+              fill="none"
+            />
+            <rect x="744" y="494" width="112" height="150" fill="#b5472f" />
+            <rect x="754" y="504" width="43" height="140" fill="#5aa9c4" />
+            <rect x="803" y="504" width="43" height="140" fill="#5aa9c4" />
+            <polygon
+              points="754,504 780,504 754,560"
+              fill="#9bd7ea"
+              opacity=".7"
+            />
+            <rect x="730" y="640" width="140" height="12" fill="#e6e0cf" />
+            <rect x="718" y="650" width="164" height="8" fill="#cfc8b4" />
+          </g>
+
+          <!-- pohon depan gedung -->
+          <rect x="254" y="502" width="16" height="148" fill="#7b3f2a" />
+          <circle cx="262" cy="477" r="62" fill="#86b13a" />
+          <circle cx="240" cy="465" r="31" fill="#b4d055" />
+          <circle cx="305" cy="499" r="30" fill="#6f9a2e" />
+          <rect x="1330" y="502" width="16" height="148" fill="#7b3f2a" />
+          <circle cx="1338" cy="477" r="62" fill="#86b13a" />
+          <circle cx="1316" cy="465" r="31" fill="#b4d055" />
+          <circle cx="1381" cy="499" r="30" fill="#6f9a2e" />
+
+          <!-- tanah halaman (rumput) -->
+          <rect x="-800" y="640" width="3200" height="64" fill="#a9c23f" />
+          <ellipse cx="520" cy="660" rx="260" ry="22" fill="#98b134" />
+          <ellipse cx="1150" cy="664" rx="300" ry="20" fill="#98b134" />
+
+          <!-- tembok rendah pagar -->
+          <g id="fenceWall" fill="#1f2d3d" fill-opacity=".3">
+            <rect x="-800" y="640" width="1396" height="62" />
+            <rect x="1006" y="640" width="374" height="62" />
+          </g>
+
+          <!-- satpam (menghadap kiri bila tidak dibalik) -->
+          <g id="guardG">
+            <g id="guardLegB">
+              <line
+                x1="0"
+                y1="-66"
+                x2="0"
+                y2="-4"
+                stroke="#1f2d3d"
+                stroke-width="17"
+                stroke-linecap="round"
+              />
+              <rect
+                x="-15"
+                y="-9"
+                width="25"
+                height="10"
+                rx="4"
+                fill="#1f2d3d"
+              />
+            </g>
+            <g id="guardLegA">
+              <line
+                x1="0"
+                y1="-66"
+                x2="0"
+                y2="-4"
+                stroke="#1f2d3d"
+                stroke-width="17"
+                stroke-linecap="round"
+              />
+              <rect
+                x="-15"
+                y="-9"
+                width="25"
+                height="10"
+                rx="4"
+                fill="#1f2d3d"
+              />
+            </g>
+            <g transform="translate(0 -122)">
+              <g id="guardArmB"><use href="#sleeveN" /></g>
+            </g>
+            <rect
+              x="-22"
+              y="-134"
+              width="44"
+              height="76"
+              rx="13"
+              fill="#f2b04c"
+              stroke="#1f2d3d"
+              stroke-width="3.5"
+            />
+            <rect x="-22" y="-78" width="44" height="8" fill="#1f2d3d" />
+            <rect
+              x="-13"
+              y="-116"
+              width="11"
+              height="9"
+              rx="2"
+              fill="#1f2d3d"
+            />
+            <g transform="translate(0 -122)">
+              <g id="guardArmA"><use href="#sleeveN" /></g>
+            </g>
+            <circle
+              cx="-2"
+              cy="-156"
+              r="20"
+              fill="#f2b04c"
+              stroke="#1f2d3d"
+              stroke-width="3.5"
+            />
+            <path d="M-25 -160 Q-3 -190 21 -160 Z" fill="#1f2d3d" />
+            <rect
+              x="-33"
+              y="-163"
+              width="32"
+              height="8"
+              rx="3"
+              fill="#1f2d3d"
+            />
+            <circle cx="-9" cy="-173" r="4.5" fill="#f2b04c" />
+            <path
+              d="M-18 -143 q7 6 14 0"
+              stroke="#1f2d3d"
+              stroke-width="3"
+              fill="none"
+              stroke-linecap="round"
+            />
+            <circle cx="-12" cy="-155" r="2.6" fill="#1f2d3d" />
+          </g>
+
+          <!-- pagar, pilar, gerbang geser, tembok pintu belakang -->
+          <g id="fenceTop">
+            <g id="fenceBars"></g>
+            <g stroke="#1f2d3d" stroke-width="4">
+              <rect x="596" y="430" width="44" height="272" fill="#f6efdc" />
+              <rect x="962" y="430" width="44" height="272" fill="#f6efdc" />
+            </g>
+            <g fill="#f2b04c" stroke="#1f2d3d" stroke-width="4">
+              <rect x="588" y="412" width="60" height="20" />
+              <rect x="954" y="412" width="60" height="20" />
+            </g>
+            <g id="leaf"></g>
+            <g id="backWall">
+              <rect
+                x="1380"
+                y="400"
+                width="440"
+                height="302"
+                fill="#f6efdc"
+                stroke="#1f2d3d"
+                stroke-width="5"
+              />
+              <rect x="1366" y="380" width="468" height="26" fill="#1f2d3d" />
+              <text
+                x="1516"
+                y="476"
+                text-anchor="middle"
+                font-family="'Patrick Hand','Segoe Print','Comic Sans MS',cursive"
+                font-size="26"
+                fill="#1f2d3d"
+              >
+                Pintu belakang
+              </text>
+              <rect x="1470" y="520" width="92" height="180" fill="#f2b04c" />
+              <g id="doorLeaf">
+                <rect x="1470" y="520" width="92" height="180" fill="#1f2d3d" />
+                <rect
+                  x="1482"
+                  y="534"
+                  width="68"
+                  height="62"
+                  fill="none"
+                  stroke="#f6efdc"
+                  stroke-opacity=".4"
+                  stroke-width="3"
+                />
+                <rect
+                  x="1482"
+                  y="610"
+                  width="68"
+                  height="76"
+                  fill="none"
+                  stroke="#f6efdc"
+                  stroke-opacity=".4"
+                  stroke-width="3"
+                />
+                <circle cx="1548" cy="612" r="6" fill="#f2b04c" />
+              </g>
+            </g>
+          </g>
+
+          <!-- jalan -->
+          <rect
+            x="-800"
+            y="700"
+            width="3200"
+            height="700"
+            fill="#1f2d3d"
+            opacity=".14"
+          />
+          <rect
+            x="-800"
+            y="700"
+            width="3200"
+            height="10"
+            fill="#1f2d3d"
+            opacity=".5"
+          />
+          <line
+            x1="-800"
+            y1="962"
+            x2="2400"
+            y2="962"
+            stroke="#f6efdc"
+            stroke-width="8"
+            stroke-dasharray="70 50"
+          />
+        </g>
+        <g id="corridorScene" style="display: none"></g>
+        <g id="roomScene" style="display: none"></g>
+
+        <!-- murid -->
+        <g id="kidG">
+          <g id="kidLegB">
+            <line
+              x1="0"
+              y1="-66"
+              x2="0"
+              y2="-4"
+              stroke="#1f2d3d"
+              stroke-width="14"
+              stroke-linecap="round"
+            />
+            <rect x="-14" y="-9" width="23" height="10" rx="4" fill="#1f2d3d" />
+          </g>
+          <g id="kidLegA">
+            <line
+              x1="0"
+              y1="-66"
+              x2="0"
+              y2="-4"
+              stroke="#1f2d3d"
+              stroke-width="14"
+              stroke-linecap="round"
+            />
+            <rect x="-14" y="-9" width="23" height="10" rx="4" fill="#1f2d3d" />
+          </g>
+          <g id="kidUp">
+            <g transform="translate(0 -118)">
+              <g id="kidArmB"><use href="#sleeveC" /></g>
+            </g>
+            <rect
+              x="9"
+              y="-124"
+              width="24"
+              height="52"
+              rx="8"
+              fill="#f2b04c"
+              stroke="#1f2d3d"
+              stroke-width="3.5"
+            />
+            <rect
+              x="-17"
+              y="-130"
+              width="34"
+              height="72"
+              rx="12"
+              fill="#f6efdc"
+              stroke="#1f2d3d"
+              stroke-width="3.5"
+            />
+            <rect x="-17" y="-72" width="34" height="14" fill="#1f2d3d" />
+            <g transform="translate(0 -118)">
+              <g id="kidArmA"><use href="#sleeveC" /></g>
+            </g>
+            <circle
+              cx="-2"
+              cy="-152"
+              r="19"
+              fill="#f2b04c"
+              stroke="#1f2d3d"
+              stroke-width="3.5"
+            />
+            <path
+              d="M-23 -153 A21 21 0 0 1 19 -153 Q-2 -163 -23 -153 Z"
+              fill="#1f2d3d"
+            />
+            <circle cx="-11" cy="-150" r="2.4" fill="#1f2d3d" />
+          </g>
+        </g>
+      </svg>
+
+      <div class="vignette"></div>
+      <div class="dusk"></div>
+      <div class="bar t"></div>
+      <div class="bar b"></div>
+
+      <div class="caption" id="caption" role="status" aria-live="polite"></div>
+
+      <div
+        class="choices"
+        id="choices"
+        role="group"
+        aria-label="Pilihan jawaban"
+      >
+        <div class="row">
+          <button class="choice" type="button" data-k="now">
+            <span class="k">1</span><span>Kerjakan sekarang</span>
+          </button>
+          <button class="choice" type="button" data-k="later">
+            <span class="k">2</span><span>Nanti saja</span>
+          </button>
+          <button class="choice" type="button" data-k="skip">
+            <span class="k">3</span><span>Tidak dikerjakan</span>
+          </button>
+        </div>
+      </div>
+
+      <div
+        class="choices flat"
+        id="gateChoices"
+        role="group"
+        aria-label="Pilihan saat terlambat"
+      >
+        <div class="askwrap">
+          <span class="ask">Kamu terlambat! Apa yang kamu lakukan?</span>
+        </div>
+        <div class="row">
+          <button class="choice" type="button" data-g="climb">
+            <span class="k">1</span><span>Panjat pagar</span>
+          </button>
+          <button class="choice" type="button" data-g="tell">
+            <span class="k">2</span><span>Bilang ke satpam</span>
+          </button>
+          <button class="choice" type="button" data-g="back">
+            <span class="k">3</span><span>Lewat pintu belakang</span>
+          </button>
+        </div>
+      </div>
+
+      <div
+        class="choices"
+        id="examChoices"
+        role="group"
+        aria-label="Pilihan saat ulangan"
+      >
+        <div class="askwrap">
+          <span class="ask"
+            >Jawabanmu masih kosong. Apa yang kamu lakukan?</span
+          >
+        </div>
+        <div class="row">
+          <button class="choice" type="button" data-e="own">
+            <span class="k">1</span><span>Kerjakan sendiri</span>
+          </button>
+          <button class="choice" type="button" data-e="peek">
+            <span class="k">2</span><span>Lirik jawaban teman</span>
+          </button>
+          <button class="choice" type="button" data-e="blank">
+            <span class="k">3</span><span>Kosongkan kertas</span>
+          </button>
+        </div>
+      </div>
+      <div
+        class="choices flat"
+        id="walletChoices"
+        role="group"
+        aria-label="Pilihan saat menemukan dompet"
+      >
+        <div class="askwrap">
+          <span class="ask"
+            >Dompet itu tergeletak begitu saja. Apa yang kamu lakukan?</span
+          >
+        </div>
+        <div class="row">
+          <button class="choice" type="button" data-w="give">
+            <span class="k">1</span><span>Serahkan ke ruang guru</span>
+          </button>
+          <button class="choice" type="button" data-w="take">
+            <span class="k">2</span
+            ><span>Ambil uangnya, taruh dompetnya kembali</span>
+          </button>
+          <button class="choice" type="button" data-w="ignore">
+            <span class="k">3</span
+            ><span>Biarkan saja, pura-pura tidak lihat</span>
+          </button>
+        </div>
+      </div>
+      <button class="back" id="again" type="button">Main dari awal</button>
+
+      <div class="fade" id="fade"></div>
+      <div class="card" id="card"></div>
+
+      <div
+        class="reveal"
+        id="reveal"
+        role="dialog"
+        aria-label="Kartu karakter dari Bu Guru"
+      >
+        <div class="flip">
+          <div class="face front">
+            <span>?</span><small>Kartu dari Bu Guru</small>
+          </div>
+          <div class="face rear">
+            <div class="scroll">
+              <div class="kicker">Karaktermu menurut Bu Guru</div>
+              <h2 id="rTitle"></h2>
+              <p class="sub" id="rSub"></p>
+              <div class="traits" id="rBars"></div>
+              <div class="note">
+                <b>Catatan Bu Guru</b>
+                <p id="rNote"></p>
+              </div>
+              <button class="again2" id="rAgain" type="button">
+                Main dari awal
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="intro"></div>
+    </main>
+
+    <script>
+      (() => {
+        "use strict";
+        const $ = (id) => document.getElementById(id);
+        const svg = $("world"),
+          gsvg = $("gate"),
+          stage = $("stage");
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const easeIO = (t) =>
+          t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+        const easeO = (t) => 1 - Math.pow(1 - t, 3);
+        const lin = (t) => t;
+        const reduce =
+          window.matchMedia &&
+          matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+        /* ---------- kamera ---------- */
+        // w,h = area minimum yang harus terlihat; sisanya mengikuti rasio layar
+        const CAM = {
+          intro: { cx: 800, cy: 420, w: 1080, h: 930 },
+          board: { cx: 800, cy: 462, w: 900, h: 780 },
+          book: { cx: 915, cy: 655, w: 440, h: 280 },
+          bookIn: { cx: 932, cy: 668, w: 400, h: 255 },
+          clock: { cx: 1372, cy: 256, w: 400, h: 260 },
+          window: { cx: 212, cy: 300, w: 440, h: 340 },
+          windowIn: { cx: 222, cy: 300, w: 380, h: 293 },
+          deliver: { cx: 800, cy: 610, w: 760, h: 560 },
+          gateWide: { cx: 800, cy: 600, w: 1500, h: 800 },
+          gateMid: { cx: 800, cy: 610, w: 1180, h: 700 },
+          gateAsk: { cx: 800, cy: 735, w: 1180, h: 700 },
+          gateTell: { cx: 790, cy: 610, w: 980, h: 640 },
+          gateClimb: { cx: 1010, cy: 575, w: 1240, h: 720 },
+          gateBack: { cx: 1440, cy: 620, w: 1000, h: 640 },
+          paper: { cx: 930, cy: 676, w: 430, h: 290 },
+          friend: { cx: 1450, cy: 650, w: 300, h: 200 },
+          corridor: { cx: 500, cy: 560, w: 1100, h: 640 },
+          wallet: { cx: 1390, cy: 755, w: 760, h: 480 },
+          room: { cx: 800, cy: 650, w: 1300, h: 760 },
+          deskCard: { cx: 810, cy: 600, w: 600, h: 380 },
+        };
+        const cam = { ...CAM.intro };
+        let par = 0; // 0 = di belakang murid, 1 = melewati bahu menuju meja
+        let aspect = 1.6,
+          token = 0,
+          state = "intro";
+
+        function measure() {
+          const r = stage.getBoundingClientRect();
+          aspect = Math.max(0.2, r.width / Math.max(1, r.height));
+        }
+        addEventListener("resize", measure);
+        measure();
+
+        function renderCam(t) {
+          const visW = Math.max(cam.w, cam.h * aspect),
+            visH = visW / aspect,
+            k = visW / 1000;
+          const sx = reduce ? 0 : Math.sin(t * 0.55) * 4 * k,
+            sy = reduce ? 0 : Math.cos(t * 0.43) * 3 * k;
+          (stage.classList.contains("in-gate") ? gsvg : svg).setAttribute(
+            "viewBox",
+            `${cam.cx + sx - visW / 2} ${cam.cy + sy - visH / 2} ${visW} ${visH}`,
+          );
+        }
+
+        /* ---------- tween & waktu ---------- */
+        function tween(dur, fn, ease = easeIO) {
+          const my = token;
+          return new Promise((res) => {
+            const t0 = performance.now();
+            (function step() {
+              if (my !== token) {
+                res(false);
+                return;
+              }
+              const k = Math.min(1, (performance.now() - t0) / (dur * 1000));
+              fn(ease(k), k);
+              if (k < 1) requestAnimationFrame(step);
+              else res(true);
+            })();
+          });
+        }
+        function wait(s) {
+          const my = token;
+          return new Promise((r) =>
+            setTimeout(() => r(my === token), s * 1000),
+          );
+        }
+
+        let camJob = 0;
+        function camTo(target, parTarget, dur, ease = easeIO) {
+          const c0 = { ...cam },
+            p0 = par,
+            job = ++camJob;
+          return tween(
+            dur,
+            (e) => {
+              if (job !== camJob) return;
+              cam.cx = lerp(c0.cx, target.cx, e);
+              cam.cy = lerp(c0.cy, target.cy, e);
+              cam.w = c0.w * Math.pow(target.w / c0.w, e);
+              cam.h = c0.h * Math.pow(target.h / c0.h, e);
+              par = lerp(p0, parTarget, e);
+              renderParallax();
+            },
+            ease,
+          );
+        }
+
+        /* ---------- jam dinding ---------- */
+        const clock = { sec: 0, f: 1 };
+        const hHand = $("hHand"),
+          mHand = $("mHand"),
+          sHand = $("sHand");
+        (function ticks() {
+          let s = "";
+          for (let i = 0; i < 12; i++) {
+            s += `<line x1="1372" y1="196" x2="1372" y2="${i % 3 === 0 ? 206 : 203}" transform="rotate(${i * 30} 1372 256)"/>`;
+          }
+          $("ticks").innerHTML = s;
+        })();
+        function renderClock() {
+          const s = clock.sec % 60,
+            mins = 50 + clock.sec / 60;
+          sHand.setAttribute("transform", `rotate(${s * 6} 1372 256)`);
+          mHand.setAttribute(
+            "transform",
+            `rotate(${(mins * 6) % 360} 1372 256)`,
+          );
+          hHand.setAttribute(
+            "transform",
+            `rotate(${((1 + mins / 60) % 12) * 30} 1372 256)`,
+          );
+        }
+
+        /* ---------- lantai ---------- */
+        (function floor() {
+          let s = "";
+          for (let k = -14; k <= 14; k++) {
+            const x0 = 800 + k * 130,
+              x1 = 800 + ((x0 - 800) * (2200 - 300)) / (720 - 300);
+            s += `<line x1="${x0}" y1="720" x2="${x1.toFixed(0)}" y2="2200"/>`;
+          }
+          for (
+            let n = 0, y = 740;
+            y < 2200;
+            n++, y = 720 + 34 * Math.pow(1.32, n)
+          ) {
+            s += `<line x1="-400" y1="${y.toFixed(0)}" x2="2000" y2="${y.toFixed(0)}"/>`;
+          }
+          $("floorLines").innerHTML = s;
+        })();
+
+        /* ---------- tulisan tangan ---------- */
+        const inkG = $("ink"),
+          NS = "http://www.w3.org/2000/svg";
+        const INK_FONT =
+          "'Patrick Hand','Segoe Print','Bradley Hand','Comic Sans MS',cursive";
+        function makeInk(group, texts, x, ys, maxW, size, tag) {
+          const lines = texts.map((str, i) => {
+            const id = tag + i;
+            const cp = document.createElementNS(NS, "clipPath");
+            cp.setAttribute("id", id);
+            const r = document.createElementNS(NS, "rect");
+            r.setAttribute("x", x - 3);
+            r.setAttribute("y", ys[i] - 24);
+            r.setAttribute("height", 34);
+            r.setAttribute("width", 0);
+            cp.appendChild(r);
+            svg.querySelector("defs").appendChild(cp);
+            const t = document.createElementNS(NS, "text");
+            t.setAttribute("x", x);
+            t.setAttribute("y", ys[i]);
+            t.setAttribute("font-family", INK_FONT);
+            t.setAttribute("font-size", size);
+            t.setAttribute("fill", "#1f3fa8");
+            t.setAttribute("stroke", "none");
+            t.setAttribute("clip-path", `url(#${id})`);
+            t.textContent = str;
+            group.appendChild(t);
+            return { t, r, x, y: ys[i], w: 0 };
+          });
+          lines.maxW = maxW;
+          lines.size = size;
+          return lines;
+        }
+        function measureLines(lines) {
+          lines.forEach((l) => {
+            l.t.setAttribute("font-size", lines.size);
+            let w = l.t.getComputedTextLength();
+            if (w > lines.maxW) {
+              l.t.setAttribute(
+                "font-size",
+                ((lines.size * lines.maxW) / w).toFixed(2),
+              );
+              w = lines.maxW;
+            }
+            l.w = w;
+          });
+        }
+        const inkLines = makeInk(
+          inkG,
+          ["Developer by", "Ali Ibnu Jabir", "and", "Rizky Saputra", "Dinata"],
+          952,
+          [637, 657, 677, 697, 717],
+          140,
+          17,
+          "inkClip",
+        );
+        function resetInk() {
+          inkLines.forEach((l) => l.r.setAttribute("width", 0));
+          inkG.removeAttribute("style");
+          inkG.setAttribute("opacity", 0.92);
+        }
+
+        /* ---------- lengan & tangan ---------- */
+        const E_L = { x: 500, y: 885 },
+          H_L = { x: 688, y: 694 };
+        const E_R = { x: 1100, y: 885 };
+        const R0 = { hx: 1020, hy: 745, fx: 1004, fy: 727 };
+        const PEN0 = { tx: 1136, ty: 696, dx: 70, dy: -24 };
+        const R = { ...R0 },
+          pen = { ...PEN0 };
+        const el = {};
+        [
+          "foreLo",
+          "foreLi",
+          "foreRo",
+          "foreRi",
+          "handR",
+          "fingR",
+          "handShadow",
+          "penShadow",
+          "penBody",
+          "penBand",
+          "penTip",
+          "sleeves",
+          "studentBody",
+        ].forEach((id) => (el[id] = $(id)));
+
+        function extend(E, H, amt) {
+          const dx = E.x - H.x,
+            dy = E.y - H.y,
+            l = Math.hypot(dx, dy) || 1;
+          return { x: E.x + (dx / l) * amt, y: E.y + (dy / l) * amt };
+        }
+        function setLine(a, b, x1, y1, x2, y2) {
+          [a, b].forEach((n) => {
+            n.setAttribute("x1", x1);
+            n.setAttribute("y1", y1);
+            n.setAttribute("x2", x2);
+            n.setAttribute("y2", y2);
+          });
+        }
+        function drawArms() {
+          const ext = 720 * par;
+          const a = extend(E_L, H_L, ext);
+          setLine(el.foreLo, el.foreLi, a.x, a.y, H_L.x, H_L.y);
+          const b = extend(E_R, { x: R.hx, y: R.hy }, ext);
+          setLine(el.foreRo, el.foreRi, b.x, b.y, R.hx, R.hy);
+
+          el.handR.setAttribute("cx", R.hx);
+          el.handR.setAttribute("cy", R.hy);
+          el.fingR.setAttribute("cx", R.fx);
+          el.fingR.setAttribute("cy", R.fy);
+          el.handShadow.setAttribute("cx", R.hx + 10);
+          el.handShadow.setAttribute("cy", R.hy + 14);
+
+          const x2 = pen.tx + pen.dx,
+            y2 = pen.ty + pen.dy;
+          el.penBody.setAttribute("x1", pen.tx + pen.dx * 0.12);
+          el.penBody.setAttribute("y1", pen.ty + pen.dy * 0.12);
+          el.penBody.setAttribute("x2", x2);
+          el.penBody.setAttribute("y2", y2);
+          el.penShadow.setAttribute("x1", pen.tx + 3);
+          el.penShadow.setAttribute("y1", pen.ty + 5);
+          el.penShadow.setAttribute("x2", x2 + 3);
+          el.penShadow.setAttribute("y2", y2 + 5);
+          el.penTip.setAttribute("x1", pen.tx);
+          el.penTip.setAttribute("y1", pen.ty);
+          el.penTip.setAttribute("x2", pen.tx + pen.dx * 0.15);
+          el.penTip.setAttribute("y2", pen.ty + pen.dy * 0.15);
+          el.penBand.setAttribute("x1", pen.tx + pen.dx * 0.8);
+          el.penBand.setAttribute("y1", pen.ty + pen.dy * 0.8);
+          el.penBand.setAttribute("x2", pen.tx + pen.dx * 0.84);
+          el.penBand.setAttribute("y2", pen.ty + pen.dy * 0.84);
+        }
+        function renderParallax() {
+          const t = `translate(0 ${(par * 420).toFixed(1)})`;
+          el.studentBody.setAttribute("transform", t);
+          el.sleeves.setAttribute("transform", t);
+          drawArms();
+        }
+
+        /* ---------- UI helpers ---------- */
+        const choicesEl = $("choices"),
+          captionEl = $("caption");
+        const showChoices = () => choicesEl.classList.add("show");
+        const hideChoices = () => choicesEl.classList.remove("show");
+        function caption(txt) {
+          captionEl.textContent = txt;
+          captionEl.classList.add("show");
+        }
+        function hideCaption() {
+          captionEl.classList.remove("show");
+        }
+        function begin() {
+          token++;
+          state = "scene";
+          hideChoices();
+          hideCaption();
+          stage.classList.add("cinema");
+          if (document.activeElement) document.activeElement.blur();
+        }
+
+        /* ---------- SCENE 2A: kerjakan sekarang ---------- */
+        async function writing(lines = inkLines) {
+          // jangkau pulpen
+          const P = { x: pen.tx + pen.dx * 0.5, y: pen.ty + pen.dy * 0.5 };
+          const hs = { x: R.hx, y: R.hy },
+            hr = { x: P.x + 16, y: P.y + 18 };
+          if (
+            !(await tween(1, (e) => {
+              R.hx = lerp(hs.x, hr.x, e);
+              R.hy = lerp(hs.y, hr.y, e);
+              R.fx = R.hx - 16;
+              R.fy = R.hy - 18;
+              drawArms();
+            }))
+          )
+            return;
+          if (!(await wait(0.2))) return;
+
+          // ambil pulpen & angkat ke baris pertama
+          const T0 = { x: pen.tx, y: pen.ty },
+            D0 = { x: pen.dx, y: pen.dy };
+          measureLines(lines);
+          const T1 = { x: lines[0].x, y: lines[0].y - 2 },
+            D1 = { x: 30, y: 72 };
+          if (
+            !(await tween(1.1, (e) => {
+              pen.tx = lerp(T0.x, T1.x, e);
+              pen.ty = lerp(T0.y, T1.y, e) - 20 * Math.sin(Math.PI * e);
+              pen.dx = lerp(D0.x, D1.x, e);
+              pen.dy = lerp(D0.y, D1.y, e);
+              const k = lerp(0.5, 0.85, e),
+                ox = lerp(16, 0, e),
+                oy = lerp(18, 0, e),
+                fk = lerp(0.5, 0.45, e);
+              R.hx = pen.tx + pen.dx * k + ox;
+              R.hy = pen.ty + pen.dy * k + oy;
+              R.fx = pen.tx + pen.dx * fk;
+              R.fy = pen.ty + pen.dy * fk;
+              drawArms();
+            }))
+          )
+            return;
+
+          const setTip = (x, y) => {
+            pen.tx = x;
+            pen.ty = y;
+            R.hx = x + pen.dx * 0.85;
+            R.hy = y + pen.dy * 0.85;
+            R.fx = x + pen.dx * 0.45;
+            R.fy = y + pen.dy * 0.45;
+            drawArms();
+          };
+          for (let i = 0; i < lines.length; i++) {
+            const l = lines[i];
+            if (i > 0) {
+              const a = { x: pen.tx, y: pen.ty },
+                b = { x: l.x, y: l.y - 2 };
+              if (
+                !(await tween(0.28, (e) =>
+                  setTip(
+                    lerp(a.x, b.x, e),
+                    lerp(a.y, b.y, e) - 8 * Math.sin(Math.PI * e),
+                  ),
+                ))
+              )
+                return;
+            }
+            if (
+              !(await tween(
+                Math.max(0.6, l.w / 70),
+                (e) => {
+                  const x = l.x + e * l.w;
+                  l.r.setAttribute("width", e * l.w + 3 + (e >= 1 ? 8 : 0));
+                  setTip(x, l.y - 2 - 3 * Math.abs(Math.sin(x * 0.7)));
+                },
+                lin,
+              ))
+            )
+              return;
+          }
+          // angkat pulpen sedikit setelah selesai
+          const a = { x: pen.tx, y: pen.ty };
+          return await tween(
+            0.6,
+            (e) => setTip(a.x + 6 * e, a.y - 10 * e),
+            easeO,
+          );
+        }
+        /* ---------- mengantar tugas ke meja guru ---------- */
+        const bookWrap = $("bookWrap"),
+          handLg = $("handLg");
+        const BOOK_C = { x: 915, y: 680 },
+          DESK_C = { x: 800, y: 528 },
+          BOOK_S = 0.3;
+        const HL0 = { x: H_L.x, y: H_L.y };
+        let bookU = 0;
+        function bookPose(u, lift) {
+          return {
+            s: lerp(1, BOOK_S, u),
+            x: lerp(BOOK_C.x, DESK_C.x, u),
+            y:
+              lerp(BOOK_C.y, DESK_C.y, u) - (lift || 0) * Math.sin(Math.PI * u),
+          };
+        }
+        const bookPt = (q, p) => ({
+          x: q.x + q.s * (p.x - BOOK_C.x),
+          y: q.y + q.s * (p.y - BOOK_C.y),
+        });
+        function setBook(u, lift) {
+          bookU = u;
+          if (u === 0) {
+            bookWrap.removeAttribute("transform");
+            return;
+          }
+          const q = bookPose(u, lift);
+          bookWrap.setAttribute(
+            "transform",
+            `translate(${q.x.toFixed(1)} ${q.y.toFixed(1)}) scale(${q.s.toFixed(3)}) translate(${-BOOK_C.x} ${-BOOK_C.y})`,
+          );
+        }
+        function setLeft(x, y) {
+          H_L.x = x;
+          H_L.y = y;
+          handLg.setAttribute(
+            "transform",
+            `translate(${x - HL0.x} ${y - HL0.y})`,
+          );
+        }
+        async function deliver() {
+          const R1 = { ...R },
+            P1 = { ...pen },
+            L1 = { x: H_L.x, y: H_L.y };
+          const oPen = { x: P1.tx - R1.hx, y: P1.ty - R1.hy },
+            oF = { x: R1.fx - R1.hx, y: R1.fy - R1.hy };
+          const rPt = { x: 1092, y: 744 },
+            lPt = { x: 712, y: 736 };
+          const setHands = (rx, ry, lx, ly) => {
+            R.hx = rx;
+            R.hy = ry;
+            R.fx = rx + oF.x;
+            R.fy = ry + oF.y;
+            pen.tx = rx + oPen.x;
+            pen.ty = ry + oPen.y;
+            setLeft(lx, ly);
+            drawArms();
+          };
+          hideCaption();
+          camTo(CAM.deliver, 1, 1.8);
+          // 1) tangan memegang buku
+          if (
+            !(await tween(0.9, (e) =>
+              setHands(
+                lerp(R1.hx, rPt.x, e),
+                lerp(R1.hy, rPt.y, e),
+                lerp(L1.x, lPt.x, e),
+                lerp(L1.y, lPt.y, e),
+              ),
+            ))
+          )
+            return;
+          caption("Selesai! Saatnya dikumpulkan.");
+          $("studentBody").after(bookWrap); // buku tampil di atas badan murid
+          if (!(await wait(0.5))) return;
+          // 2) buku dibawa ke meja guru
+          if (
+            !(await tween(2.4, (e) => {
+              setBook(e, 120);
+              const q = bookPose(e, 120),
+                a = bookPt(q, rPt),
+                b = bookPt(q, lPt);
+              setHands(a.x, a.y, b.x, b.y);
+            }))
+          )
+            return;
+          setBook(1);
+          hideCaption();
+          if (!(await wait(0.5))) return;
+          caption("Tugas sudah dikumpulkan ke guru.");
+          // 3) tangan kembali
+          const Re = { ...R },
+            Pe = { ...pen },
+            Le = { x: H_L.x, y: H_L.y };
+          return await tween(1.2, (e) => {
+            R.hx = lerp(Re.hx, R0.hx, e);
+            R.hy = lerp(Re.hy, R0.hy, e);
+            R.fx = lerp(Re.fx, R0.fx, e);
+            R.fy = lerp(Re.fy, R0.fy, e);
+            ["tx", "ty", "dx", "dy"].forEach(
+              (k) => (pen[k] = lerp(Pe[k], PEN0[k], e)),
+            );
+            setLeft(lerp(Le.x, HL0.x, e), lerp(Le.y, HL0.y, e));
+            drawArms();
+          });
+        }
+        async function sceneNow() {
+          begin();
+          if (!(await camTo(CAM.book, 1, 2.4))) return;
+          caption("Gas, tugas harus selesai!");
+          camTo(CAM.bookIn, 1, 12, lin);
+          if (!(await writing())) return;
+          if (!(await deliver())) return;
+          award("kelas", "now");
+          toExam();
+        }
+
+        /* ---------- SCENE 2B: nanti saja ---------- */
+        async function sceneLater() {
+          begin();
+          if (!(await camTo(CAM.clock, 0, 2.1))) return;
+          caption("Masih ada waktu... katanya.");
+          stage.classList.add("dusk-on");
+          if (!(await tween(0.9, (e) => (clock.f = lerp(1, 160, e))))) return;
+          if (!(await wait(2.6))) return;
+          tween(0.7, (e) => (clock.f = lerp(160, 1, e)));
+          if (!(await camTo(CAM.book, 1, 2.3))) return;
+          stage.classList.add("tapping");
+          camTo(CAM.bookIn, 1, 14, lin);
+          if (!(await wait(7))) return;
+          award("kelas", "later");
+          toExam();
+        }
+
+        /* ---------- SCENE 2C: tidak dikerjakan ---------- */
+        async function sceneSkip() {
+          begin();
+          if (!(await camTo(CAM.book, 1, 2.2))) return;
+          if (!(await wait(1.5))) return;
+          if (!(await camTo(CAM.window, 1, 2.3))) return;
+          caption("Besok urusan besok.");
+          camTo(CAM.windowIn, 1, 14, lin);
+          if (!(await wait(6))) return;
+          award("kelas", "skip");
+          toExam();
+        }
+
+        /* ---------- SCENE 0: gerbang sekolah ---------- */
+        const gateChEl = $("gateChoices"),
+          fadeEl = $("fade"),
+          cardEl = $("card");
+        const LEAF_OPEN = 991.5,
+          LEAF_SHUT = 640;
+        const leafEl = $("leaf"),
+          doorEl = $("doorLeaf");
+        (function buildGate() {
+          let f = "";
+          for (let x = -560; x < 1380; x += 34) {
+            if (x > 570 && x < 1010) continue;
+            f += `<rect x="${x}" y="486" width="9" height="160" fill="#1f2d3d"/><polygon points="${x},486 ${x + 4.5},470 ${x + 9},486" fill="#1f2d3d"/>`;
+          }
+          f += `<rect x="-800" y="500" width="1396" height="12" fill="#1f2d3d"/><rect x="-800" y="626" width="1396" height="12" fill="#1f2d3d"/>`;
+          f += `<rect x="1006" y="500" width="374" height="12" fill="#1f2d3d"/><rect x="1006" y="626" width="374" height="12" fill="#1f2d3d"/>`;
+          $("fenceBars").innerHTML = f;
+          let l = "";
+          for (let k = 0; k < 9; k++) {
+            const x = 12.5 + k * 34;
+            l += `<rect x="${x}" y="486" width="9" height="196" fill="#1f2d3d"/><polygon points="${x},486 ${x + 4.5},470 ${x + 9},486" fill="#1f2d3d"/>`;
+          }
+          l += `<rect x="0" y="500" width="322" height="12" fill="#1f2d3d"/><rect x="0" y="626" width="322" height="12" fill="#1f2d3d"/><rect x="0" y="682" width="322" height="12" fill="#1f2d3d"/>`;
+          l += `<rect x="2" y="560" width="22" height="30" rx="5" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3"/>`;
+          leafEl.innerHTML = l;
+        })();
+        const setLeaf = (x) =>
+          leafEl.setAttribute("transform", `translate(${x.toFixed(1)} 0)`);
+        const setDoor = (k) =>
+          doorEl.setAttribute(
+            "transform",
+            `translate(1470 0) scale(${k.toFixed(3)} 1) translate(-1470 0)`,
+          );
+
+        const SVGNS = "http://www.w3.org/2000/svg";
+        const figure = (p) => {
+          const f = {
+            g: $(p + "G"),
+            la: $(p + "LegA"),
+            lb: $(p + "LegB"),
+            aa: $(p + "ArmA"),
+            ab: $(p + "ArmB"),
+            up: $(p + "Up"),
+          };
+          if (f.up)
+            f.legs = [f.la, f.lb].map((g) => {
+              const mk = (tag, o) => {
+                const e = document.createElementNS(SVGNS, tag);
+                Object.entries(o).forEach(([k, v]) => e.setAttribute(k, v));
+                return e;
+              };
+              const ln = {
+                stroke: "#1f2d3d",
+                "stroke-width": 14,
+                "stroke-linecap": "round",
+              };
+              const grp = mk("g", {}),
+                th = mk("line", ln),
+                sh = mk("line", ln),
+                shoe = mk("rect", {
+                  width: 23,
+                  height: 10,
+                  rx: 4,
+                  y: -9,
+                  fill: "#1f2d3d",
+                });
+              grp.style.display = "none";
+              grp.append(th, sh, shoe);
+              const orig = [...g.children];
+              g.append(grp);
+              return { g, orig, grp, th, sh, shoe };
+            });
+          return f;
+        };
+        function standUp(f) {
+          f.up.removeAttribute("transform");
+          f.legs.forEach((l) => {
+            l.grp.style.display = "none";
+            l.orig.forEach((c) => (c.style.display = ""));
+          });
+        }
+        const guard = figure("guard"),
+          kid = figure("kid");
+        const rotAt = (n, a, y = 0) =>
+          n.setAttribute("transform", `rotate(${a.toFixed(1)} 0 ${y})`);
+        function place(f, x, y, s, face, rot) {
+          const r = rot ? (face === "R" ? rot : -rot) : 0; // rot = condong ke depan (derajat)
+          f.g.setAttribute(
+            "transform",
+            `translate(${x.toFixed(1)} ${y.toFixed(1)}) rotate(${r.toFixed(1)}) scale(${(face === "R" ? -s : s).toFixed(3)} ${s.toFixed(3)})`,
+          );
+        }
+        function walkPose(f, ph, leg = 34, arm = 36) {
+          if (f.up) standUp(f);
+          const a = Math.sin(ph);
+          rotAt(f.la, a * leg, -64);
+          rotAt(f.lb, -a * leg, -64);
+          rotAt(f.aa, -a * arm);
+          rotAt(f.ab, a * arm);
+        }
+        function idlePose(f, t = 0) {
+          if (f.up) standUp(f);
+          rotAt(f.la, 0, -64);
+          rotAt(f.lb, 0, -64);
+          rotAt(f.aa, 4 + Math.sin(t) * 2);
+          rotAt(f.ab, -4 - Math.sin(t) * 2);
+        }
+        const kidOpacity = (v) => kid.g.setAttribute("opacity", v.toFixed(2));
+        const fadeOut = (e) => (e > 0.75 ? 1 - (e - 0.75) / 0.25 : 1);
+        const clamp01 = (v) => Math.max(0, Math.min(1, v));
+
+        async function gateStart() {
+          state = "gate";
+          stage.classList.add("in-gate", "cinema");
+          Object.assign(cam, CAM.gateWide);
+          par = 0;
+          setLeaf(LEAF_OPEN);
+          setDoor(1);
+          kidOpacity(1);
+          $("fenceWall").after(guard.g);
+          $("fenceTop").parentNode.insertBefore(kid.g, null);
+          place(guard, LEAF_OPEN - 58, 694, 1, "L");
+          idlePose(guard);
+          place(kid, 1900, 880, 1.2, "L");
+          idlePose(kid);
+          if (!(await wait(1.2))) return;
+          caption(
+            "Bel masuk sudah berbunyi. Pak Satpam mulai menutup gerbang...",
+          );
+          if (!(await wait(2.6))) return;
+          hideCaption();
+
+          const closing = tween(3.8, (e) => {
+            const x = lerp(LEAF_OPEN, LEAF_SHUT, e);
+            setLeaf(x);
+            place(guard, x - 58, 694 - Math.abs(Math.sin(e * 28)) * 3, 1, "L");
+            walkPose(guard, e * 28, 22, 10);
+            rotAt(guard.aa, -78);
+            rotAt(guard.ab, -66);
+          });
+          camTo(CAM.gateMid, 0, 4.4);
+          if (!(await wait(1.1))) return;
+          const run = tween(
+            3.4,
+            (e) => {
+              const x = lerp(1800, 930, e);
+              place(kid, x, 880, 1.2, "L");
+              walkPose(kid, x * 0.05, 48, 55);
+            },
+            lin,
+          );
+          const done = await Promise.all([closing, run]);
+          if (done.includes(false)) return;
+
+          place(guard, LEAF_SHUT - 58, 694, 1, "R");
+          caption("Kamu terlambat...");
+          camTo(CAM.gateAsk, 0, 1.6);
+          if (!(await wait(1.8))) return;
+          hideCaption();
+          state = "gate-ask";
+          gateChEl.classList.add("show");
+        }
+
+        function chooseGate(k) {
+          if (state !== "gate-ask") return;
+          state = "gate-scene";
+          gateChEl.classList.remove("show");
+          ({ climb: gateClimb, tell: gateTell, back: gateBack })[k]();
+        }
+
+        /* pilihan 1: panjat pagar */
+        async function gateClimb() {
+          camTo(CAM.gateClimb, 0, 2.4);
+          caption("Gerbang sudah terkunci... pagarnya tidak terlalu tinggi.");
+          if (
+            !(await tween(
+              1.9,
+              (e) => {
+                const x = lerp(930, 1150, e);
+                place(kid, x, 880 - 168 * e, 1.2 - 0.2 * e, "R");
+                walkPose(kid, x * 0.05, 36, 38);
+              },
+              lin,
+            ))
+          )
+            return;
+          idlePose(kid);
+          if (!(await wait(0.5))) return;
+          caption("Kamu mulai memanjat...");
+          let shout = false;
+          if (
+            !(await tween(
+              2.4,
+              (e) => {
+                const ph = e * 16;
+                place(kid, 1150, 712 - 214 * e, 1.0, "R");
+                rotAt(kid.aa, 160 + Math.sin(ph) * 18);
+                rotAt(kid.ab, 160 - Math.sin(ph) * 18);
+                rotAt(kid.la, Math.sin(ph) * 38, -64);
+                rotAt(kid.lb, -Math.sin(ph) * 38, -64);
+                if (e > 0.55) {
+                  if (!shout) {
+                    shout = true;
+                    caption('Pak Satpam: "Hei! Jangan manjat pagar!"');
+                  }
+                  rotAt(guard.aa, 150 + Math.sin(e * 60) * 16);
+                }
+              },
+              lin,
+            ))
+          )
+            return;
+          let inside = false;
+          if (
+            !(await tween(
+              1.3,
+              (e) => {
+                place(
+                  kid,
+                  1150 + 70 * e,
+                  lerp(498, 694, e) - 70 * Math.sin(Math.PI * e),
+                  1.0 - 0.05 * e,
+                  "R",
+                );
+                rotAt(kid.aa, lerp(160, 20, e));
+                rotAt(kid.ab, lerp(160, -20, e));
+                rotAt(kid.la, lerp(0, 30, e), -64);
+                rotAt(kid.lb, lerp(0, -30, e), -64);
+                rotAt(guard.aa, 150 + Math.sin(e * 60) * 16);
+                if (e > 0.5 && !inside) {
+                  inside = true;
+                  $("fenceTop").before(kid.g);
+                }
+              },
+              lin,
+            ))
+          )
+            return;
+          // lari ke pintu utama gedung
+          if (
+            !(await tween(
+              2.2,
+              (e) => {
+                const x = lerp(1220, 810, e);
+                place(kid, x, lerp(694, 640, e), lerp(0.95, 0.7, e), "L");
+                walkPose(kid, x * 0.06, 42, 48);
+                kidOpacity(fadeOut(e));
+                rotAt(guard.aa, 150 + Math.sin(e * 60) * 16);
+              },
+              lin,
+            ))
+          )
+            return;
+          kidOpacity(0);
+          idlePose(guard);
+          caption("Kamu lolos... tapi Pak Satpam sudah hafal wajahmu.");
+          if (!(await wait(2.8))) return;
+          award("gate", "climb");
+          toClass(
+            "Jam pelajaran pertama.",
+            "Kamu masuk kelas dengan napas tersengal.",
+          );
+        }
+
+        /* pilihan 2: bilang ke satpam */
+        async function gateTell() {
+          camTo(CAM.gateTell, 0, 1.8);
+          if (
+            !(await tween(
+              1.5,
+              (e) => {
+                const x = lerp(930, 800, e);
+                place(kid, x, 880 - 168 * e, 1.2 - 0.2 * e, "L");
+                walkPose(kid, x * 0.05, 34, 36);
+              },
+              lin,
+            ))
+          )
+            return;
+          idlePose(kid);
+          caption('"Pak, maaf, saya terlambat..."');
+          if (!(await wait(2.1))) return;
+          caption("Pak Satpam menghela napas, lalu membuka gerbang.");
+          if (
+            !(await tween(
+              3.4,
+              (e) => {
+                const x = lerp(LEAF_SHUT, LEAF_OPEN, e);
+                setLeaf(x);
+                place(
+                  guard,
+                  x - 58,
+                  694 - Math.abs(Math.sin(e * 26)) * 3,
+                  1,
+                  "R",
+                );
+                walkPose(guard, e * 26, 22, 10);
+                rotAt(guard.aa, 72);
+                rotAt(guard.ab, 62);
+              },
+              easeIO,
+            ))
+          )
+            return;
+          place(guard, LEAF_OPEN - 58, 694, 1, "R");
+          idlePose(guard);
+          caption('"Ya sudah, masuk. Lain kali jangan terlambat."');
+          if (
+            !(await tween(
+              2.3,
+              (e) => {
+                place(
+                  kid,
+                  800 - 6 * e,
+                  lerp(712, 648, e),
+                  lerp(1, 0.7, e),
+                  "L",
+                );
+                walkPose(kid, e * 16, 32, 34);
+                kidOpacity(fadeOut(e));
+              },
+              lin,
+            ))
+          )
+            return;
+          kidOpacity(0);
+          if (!(await wait(1.4))) return;
+          award("gate", "tell");
+          toClass(
+            "Jam pelajaran pertama.",
+            "Kamu masuk kelas dengan izin Pak Satpam.",
+          );
+        }
+
+        /* pilihan 3: lewat pintu belakang */
+        async function gateBack() {
+          caption("Kamu menyelinap menyusuri pagar...");
+          camTo(CAM.gateBack, 0, 3.4);
+          if (
+            !(await tween(
+              3.4,
+              (e) => {
+                const x = lerp(930, 1516, e);
+                const u = clamp01((e - 0.62) / 0.38);
+                place(kid, x, 880 - 168 * u, 1.2 - 0.2 * u, "R");
+                walkPose(kid, x * 0.05, 36, 38);
+              },
+              lin,
+            ))
+          )
+            return;
+          idlePose(kid);
+          hideCaption();
+          if (!(await wait(0.4))) return;
+          if (!(await tween(0.8, (e) => setDoor(lerp(1, 0.16, e))))) return;
+          if (
+            !(await tween(
+              1.4,
+              (e) => {
+                place(kid, 1516, lerp(712, 694, e), lerp(1, 0.8, e), "R");
+                walkPose(kid, e * 10, 28, 30);
+                kidOpacity(e > 0.6 ? 1 - (e - 0.6) / 0.4 : 1);
+              },
+              lin,
+            ))
+          )
+            return;
+          kidOpacity(0);
+          if (!(await tween(0.6, (e) => setDoor(lerp(0.16, 1, e))))) return;
+          caption("Aman. Tidak ada yang melihat.");
+          if (!(await wait(2.6))) return;
+          award("gate", "back");
+          toClass(
+            "Jam pelajaran pertama.",
+            "Kamu masuk kelas lewat pintu belakang, diam-diam.",
+          );
+        }
+
+        /* sambungan ke adegan kelas */
+        function enterClass() {
+          state = "intro";
+          stage.classList.remove("in-gate", "cinema");
+          hideCaption();
+          Object.assign(cam, CAM.intro);
+          par = 0;
+          renderParallax();
+          measure();
+          document.querySelectorAll(".chalk").forEach((n) => {
+            n.style.animation = "none";
+            n.getBoundingClientRect();
+            n.style.animation = "";
+          });
+          camTo(CAM.board, 0, reduce ? 0.1 : 2.8, easeO);
+          setTimeout(
+            () => {
+              state = "ask";
+              showChoices();
+            },
+            reduce ? 800 : 3200,
+          );
+        }
+        async function toClass(title, sub) {
+          fadeEl.classList.add("on");
+          if (!(await wait(1.1))) return;
+          cardEl.innerHTML = `${title}<small>${sub}</small>`;
+          cardEl.classList.add("show");
+          if (!(await wait(2.8))) return;
+          cardEl.classList.remove("show");
+          if (!(await wait(0.9))) return;
+          enterClass();
+          fadeEl.classList.remove("on");
+        }
+
+        gateChEl.addEventListener("click", (e) => {
+          const b = e.target.closest(".choice");
+          if (b) chooseGate(b.dataset.g);
+        });
+
+        /* ---------- SCENE 3: ulangan dadakan ---------- */
+        const score = { disiplin: 0, jujur: 0, tanggung: 0, peduli: 0 };
+        const story = { gate: null, kelas: null, ulangan: null, dompet: null };
+        const addScore = (o) =>
+          Object.keys(o).forEach((k) => {
+            score[k] += o[k];
+          });
+        // Poin tiap pilihan untuk empat sifat: disiplin, jujur (Kejujuran), tanggung (Tanggung Jawab), peduli (Kepedulian)
+        const POINTS = {
+          gate: {
+            climb: { disiplin: -2 },
+            tell: { tanggung: 2, jujur: 1 },
+            back: { disiplin: -1, jujur: -1 },
+          },
+          kelas: {
+            now: { tanggung: 2, disiplin: 1 },
+            later: { tanggung: -1, disiplin: -1 },
+            skip: { tanggung: -2, disiplin: -1 },
+          },
+          ulangan: {
+            own: { jujur: 3 },
+            peek: { jujur: -2, disiplin: -1 },
+            blank: { tanggung: -2 },
+          },
+          dompet: {
+            give: { jujur: 2, peduli: 2 },
+            take: { jujur: -5 },
+            ignore: { peduli: -2 },
+          },
+        };
+        const award = (ch, k) => {
+          story[ch] = k;
+          addScore(POINTS[ch][k]);
+        };
+        window.__game = { score, story };
+
+        const examChEl = $("examChoices"),
+          againEl = $("again");
+        const paperEl = $("paperMine"),
+          gradeEl = $("gradeG"),
+          scoreEl = $("gradeScore");
+        const chalkEls = [...document.querySelectorAll(".chalk")];
+        const RED = "#c8282d",
+          HAND = "'Patrick Hand','Segoe Print','Comic Sans MS',cursive";
+        const ANSWER = { own: "x = -2 atau x = -3", peek: "x = 2 atau x = 3" };
+        let examNo = 0;
+
+        const setPaper = (dy, op) => {
+          paperEl.setAttribute("transform", `translate(0 ${dy.toFixed(1)})`);
+          paperEl.setAttribute("opacity", op.toFixed(2));
+        };
+        function setBoard(lines) {
+          chalkEls.forEach((n, i) => {
+            n.textContent = lines[i];
+            n.style.animation = "none";
+            n.getBoundingClientRect();
+            n.style.animation = "";
+          });
+        }
+        function restHands() {
+          const Re = { ...R },
+            Pe = { ...pen },
+            Le = { x: H_L.x, y: H_L.y };
+          return tween(1, (e) => {
+            ["hx", "hy", "fx", "fy"].forEach(
+              (k) => (R[k] = lerp(Re[k], R0[k], e)),
+            );
+            ["tx", "ty", "dx", "dy"].forEach(
+              (k) => (pen[k] = lerp(Pe[k], PEN0[k], e)),
+            );
+            setLeft(lerp(Le.x, HL0.x, e), lerp(Le.y, HL0.y, e));
+            drawArms();
+          });
+        }
+
+        async function toExam() {
+          token++;
+          camJob++;
+          state = "exam";
+          hideChoices();
+          hideCaption();
+          fadeEl.classList.add("on");
+          if (!(await wait(1.0))) return;
+          cardEl.innerHTML =
+            "Beberapa saat kemudian...<small>Bu Guru masuk membawa setumpuk kertas.</small>";
+          cardEl.classList.add("show");
+          if (!(await wait(2.4))) return;
+          cardEl.classList.remove("show");
+          if (!(await wait(0.8))) return;
+          stage.classList.remove("in-gate", "cinema", "dusk-on", "tapping");
+          clock.f = 1;
+          if (bookU === 0) bookWrap.style.display = "none";
+          $("examG").style.display = "";
+          setPaper(0, 1);
+          Object.assign(cam, CAM.board);
+          par = 0;
+          renderParallax();
+          measure();
+          setBoard([
+            "ULANGAN DADAKAN!",
+            "Soal 1:   x² + 5x + 6 = 0",
+            "Waktu: 5 menit.",
+          ]);
+          fadeEl.classList.remove("on");
+          if (!(await wait(1.2))) return;
+          caption('Bu Guru: "Simpan bukunya. Hari ini ada ulangan dadakan!"');
+          if (!(await wait(3.2))) return;
+          hideCaption();
+          stage.classList.add("cinema");
+          if (!(await camTo(CAM.paper, 1, 2.2))) return;
+          caption(
+            "Soal pertama... temanmu di sebelah sudah menulis dengan lancar.",
+          );
+          if (!(await wait(2.6))) return;
+          hideCaption();
+          state = "exam-ask";
+          examChEl.classList.add("show");
+        }
+
+        function chooseExam(k) {
+          if (state !== "exam-ask") return;
+          state = "exam-scene";
+          examChEl.classList.remove("show");
+          ({ own: examOwn, peek: examPeek, blank: examBlank })[k]();
+        }
+
+        async function writeAnswer(txt) {
+          const lines = makeInk(
+            $("examInk"),
+            [txt],
+            806,
+            [726],
+            232,
+            17,
+            "exInk" + examNo++,
+          );
+          return await writing(lines);
+        }
+
+        async function examOwn() {
+          award("ulangan", "own");
+          caption(
+            "Kamu menghitung pelan-pelan, lalu menulis jawabanmu sendiri.",
+          );
+          if (!(await writeAnswer(ANSWER.own))) return;
+          examFinish("own");
+        }
+        async function examPeek() {
+          award("ulangan", "peek");
+          caption("Kamu melirik ke kanan...");
+          if (!(await camTo(CAM.friend, 1, 1.6))) return;
+          caption("Jawaban temanmu: x = 2 atau x = 3. Kamu menyalinnya.");
+          if (!(await wait(2.8))) return;
+          hideCaption();
+          if (!(await camTo(CAM.paper, 1, 1.6))) return;
+          if (!(await writeAnswer(ANSWER.peek))) return;
+          examFinish("peek");
+        }
+        async function examBlank() {
+          award("ulangan", "blank");
+          caption("Kamu menatap kertas itu lama... lalu menaruh pulpen.");
+          if (!(await wait(3.4))) return;
+          examFinish("blank");
+        }
+
+        function buildGrade(kind) {
+          const cross = `<path d="M1054 708 l24 24 M1078 708 l-24 24" stroke="${RED}" stroke-width="4.5" fill="none" stroke-linecap="round"/>`;
+          const check = `<path d="M1052 722 l10 11 l22 -28" stroke="${RED}" stroke-width="4.5" fill="none" stroke-linecap="round" stroke-linejoin="round"/>`;
+          const fix = `<text x="808" y="754" font-size="14" fill="${RED}" font-family="${HAND}">Benar: x = -2 atau x = -3</text>`;
+          let marks = "",
+            sc = "";
+          if (kind === "own") {
+            marks = check;
+            sc = "100";
+          }
+          if (kind === "peek") {
+            marks = cross + fix;
+            sc = "40";
+          }
+          if (kind === "blank") {
+            marks =
+              `<text x="808" y="722" font-size="17" fill="${RED}" font-family="${HAND}">(kosong)</text>` +
+              fix;
+            sc = "0";
+          }
+          gradeEl.innerHTML = marks;
+          gradeEl.setAttribute("opacity", 0);
+          scoreEl.innerHTML = `<circle cx="0" cy="0" r="31" fill="none" stroke="${RED}" stroke-width="3.5"/><text x="0" y="12" text-anchor="middle" font-size="${sc.length > 2 ? 30 : 34}" fill="${RED}" font-family="${HAND}">${sc}</text>`;
+          scoreEl.setAttribute("opacity", 0);
+          scoreEl.setAttribute("transform", "translate(1042 648) scale(1)");
+        }
+
+        async function examFinish(kind) {
+          if (!(await restHands())) return;
+          caption("Waktu habis. Kertas dikumpulkan.");
+          if (!(await wait(1.4))) return;
+          if (!(await tween(1.1, (e) => setPaper(-190 * e, 1 - e)))) return;
+          hideCaption();
+          fadeEl.classList.add("on");
+          if (!(await wait(1.1))) return;
+          cardEl.innerHTML =
+            "Beberapa menit kemudian...<small>Bu Guru membagikan hasil ulangan.</small>";
+          cardEl.classList.add("show");
+          if (!(await wait(2.2))) return;
+          cardEl.classList.remove("show");
+          buildGrade(kind);
+          setPaper(-190, 0);
+          Object.assign(cam, CAM.paper);
+          par = 1;
+          renderParallax();
+          fadeEl.classList.remove("on");
+          if (!(await wait(1.0))) return;
+          if (!(await tween(1.2, (e) => setPaper(-190 * (1 - e), e), easeO)))
+            return;
+          if (!(await wait(0.5))) return;
+          if (
+            !(await tween(0.6, (e) => gradeEl.setAttribute("opacity", e), lin))
+          )
+            return;
+          if (!(await wait(0.3))) return;
+          if (
+            !(await tween(
+              0.5,
+              (e) => {
+                scoreEl.setAttribute("opacity", e);
+                scoreEl.setAttribute(
+                  "transform",
+                  `translate(1042 648) scale(${lerp(2.4, 1, e).toFixed(3)})`,
+                );
+              },
+              easeO,
+            ))
+          )
+            return;
+          if (!(await wait(1.6))) return;
+          caption(
+            {
+              own: 'Bu Guru: "Bagus sekali! Pertahankan, ya."',
+              peek: 'Bu Guru: "Jawabanmu salah. Lain kali percaya pada dirimu sendiri."',
+              blank: 'Bu Guru: "Kosong? Coba dulu ya, lain kali."',
+            }[kind],
+          );
+          if (!(await wait(3.6))) return;
+          toCorridor(kind);
+        }
+
+        /* koridor sekolah (gaya datar, dua warna) */
+        (function buildCorridor() {
+          const labels = [
+            "Kelas 7A",
+            "Kelas 7B",
+            "Kelas 8A",
+            "Kelas 8B",
+            "",
+            "Kelas 9B",
+            "UKS",
+            "Perpus",
+            "Kelas 7C",
+          ];
+          let c = `<rect x="-800" y="-600" width="4800" height="1900" fill="#f6efdc"/>`;
+          c += `<rect x="-800" y="-600" width="4800" height="780" fill="#1f2d3d"/>`;
+          for (let i = 0; i < labels.length; i++) {
+            if (i === 4) continue; // slot ini diganti tangga
+            const x = -300 + i * 420;
+            c += `<rect x="${x + 110}" y="180" width="180" height="14" fill="#f2b04c"/>`;
+            c += `<rect x="${x + 40}" y="440" width="124" height="304" fill="#1f2d3d"/>`;
+            c += `<rect x="${x + 62}" y="470" width="80" height="78" fill="#f2b04c" stroke="#f6efdc" stroke-width="3"/>`;
+            c += `<circle cx="${x + 148}" cy="610" r="6" fill="#f2b04c"/>`;
+            c += `<rect x="${x + 34}" y="392" width="136" height="34" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3"/>`;
+            c += `<text x="${x + 102}" y="417" text-anchor="middle" font-size="22" fill="#1f2d3d" font-family="${HAND}">${labels[i]}</text>`;
+            c += `<rect x="${x + 240}" y="330" width="150" height="190" fill="#f2b04c" stroke="#1f2d3d" stroke-width="5"/>`;
+            c += `<line x1="${x + 315}" y1="330" x2="${x + 315}" y2="520" stroke="#1f2d3d" stroke-width="4"/><line x1="${x + 240}" y1="425" x2="${x + 390}" y2="425" stroke="#1f2d3d" stroke-width="4"/>`;
+            c += `<rect x="${x + 230}" y="520" width="170" height="14" fill="#1f2d3d"/>`;
+          }
+          // tangga (naik ke kanan)
+          c += `<rect x="1480" y="292" width="200" height="44" rx="6" fill="#f2b04c" stroke="#1f2d3d" stroke-width="4"/>`;
+          c += `<text x="1580" y="325" text-anchor="middle" font-size="30" fill="#1f2d3d" font-family="${HAND}">Tangga</text>`;
+          for (let k = 0; k < 6; k++) {
+            const sx = 1440 + k * 56,
+              sy = 728 - (k + 1) * 48;
+            c += `<rect x="${sx}" y="${sy}" width="${(6 - k) * 56}" height="${(k + 1) * 48}" fill="#1f2d3d"/>`;
+            c += `<rect x="${sx}" y="${sy}" width="56" height="9" fill="#f2b04c"/>`;
+            const px = sx + 28,
+              ry = 680 - 0.857 * (px - 1440) - 90;
+            c += `<line x1="${px}" y1="${sy}" x2="${px}" y2="${ry.toFixed(0)}" stroke="#1f2d3d" stroke-width="5"/>`;
+          }
+          c += `<line x1="1440" y1="${(680 - 90 + 12).toFixed(0)}" x2="1776" y2="${(680 - 0.857 * 336 - 90 - 12).toFixed(0)}" stroke="#f2b04c" stroke-width="9" stroke-linecap="round"/>`;
+          c += `<rect x="-800" y="728" width="4800" height="20" fill="#1f2d3d"/>`;
+          c += `<rect x="-800" y="748" width="4800" height="800" fill="#1f2d3d" opacity=".14"/>`;
+          for (let x = -800; x < 4000; x += 210)
+            c += `<line x1="${x}" y1="748" x2="${x}" y2="1500" stroke="#1f2d3d" stroke-opacity=".12" stroke-width="3"/>`;
+          // dompet cokelat di dekat tangga
+          c +=
+            `<g id="walletG"><g id="walletBillsG"><use href="#walletBills"/></g><use href="#walletBody"/>` +
+            `<g id="walletSpark" stroke="#f2b04c" stroke-width="4" stroke-linecap="round" fill="none"><path d="M-58 -64 l-12 -12 M0 -78 v-16 M58 -64 l12 -12"><animate attributeName="opacity" values="1;.15;1" dur="1.6s" repeatCount="indefinite"/></path></g></g>`;
+          $("corridorScene").innerHTML = c;
+        })();
+
+        /* ---------- POV koridor (sudut pandang orang pertama) ---------- */
+        const pov = (() => {
+          const cv = document.createElement("canvas");
+          cv.style.cssText =
+            "position:absolute;inset:0;width:100%;height:100%;z-index:1;display:none";
+          stage.insertBefore(cv, stage.querySelector(".dusk"));
+          const g = cv.getContext("2d");
+          const o = {
+            z: 0,
+            on: false,
+            wallet: null,
+            goal: null,
+            dusk: false,
+            crouch: 0,
+            pitch: 0,
+            look: 0,
+            reach: 0,
+            hold: 0,
+            bills: 1,
+            walletOn: true,
+          };
+          const HW = 2.1,
+            HT = 3.4,
+            ZEND = 60,
+            EYE = 1.55;
+          let W = 0,
+            H = 0,
+            f = 0,
+            vx = 0,
+            vy = 0,
+            cx = 0,
+            ey = EYE,
+            cz = 0,
+            T = 0;
+          const P = (x, y, z) => [
+            vx + ((x - cx) * f) / Math.max(0.2, z - cz),
+            vy - ((y - ey) * f) / Math.max(0.2, z - cz),
+          ];
+          const poly = (pts, fill, a = 1) => {
+            if (pts.every((p) => p[2] - cz < 0.2)) return;
+            g.globalAlpha = a;
+            g.fillStyle = fill;
+            g.beginPath();
+            pts.forEach((p, i) => {
+              const q = P(...p);
+              i ? g.lineTo(q[0], q[1]) : g.moveTo(q[0], q[1]);
+            });
+            g.closePath();
+            g.fill();
+            g.globalAlpha = 1;
+          };
+          // bidang di dinding kiri/kanan: z1..z2, y1..y2
+          const wall = (s, z1, z2, y1, y2, fill, a) =>
+            poly(
+              [
+                [s * HW, y1, z1],
+                [s * HW, y1, z2],
+                [s * HW, y2, z2],
+                [s * HW, y2, z1],
+              ],
+              fill,
+              a,
+            );
+          const wtext = (s, txt, z1, z2, y1, y2, col) => {
+            const a = P(s * HW, y2, z1),
+              b = P(s * HW, y2, z2),
+              c = P(s * HW, y1, z1);
+            const h = c[1] - a[1],
+              w = Math.abs(b[0] - a[0]);
+            if (h < 5 || z1 - cz < 0.4) return;
+            g.save();
+            g.font = `${h * 0.62}px "Patrick Hand", cursive`;
+            const m = g.measureText(txt).width || 1;
+            g.translate((a[0] + b[0]) / 2, (a[1] + c[1]) / 2 + h * 0.2);
+            g.scale(Math.min(1.2, w / m), 1);
+            g.fillStyle = col;
+            g.textAlign = "center";
+            g.fillText(txt, 0, 0);
+            g.restore();
+          };
+          const door = (s, z1, z2, tall) => {
+            wall(s, z1 - 0.12, z2 + 0.12, 0, tall + 0.1, "#4a2c16");
+            wall(s, z1, z2, 0, tall, "#a8642e");
+            wall(s, z1 + 0.12, z2 - 0.12, 1.05, 1.9, "#b9773c", 0.8);
+            wall(s, z1, z2, tall * 0.5, tall * 0.5 + 0.03, "#5b3519", 0.7);
+          };
+
+          function draw(t) {
+            if (!o.on) return;
+            const d = Math.min(devicePixelRatio || 1, 1.5);
+            const w = Math.round(cv.clientWidth * d),
+              h = Math.round(cv.clientHeight * d);
+            if (w !== W || h !== H) {
+              cv.width = W = w;
+              cv.height = H = h;
+            }
+            f = Math.max(H * 0.95, W * 0.6);
+            vx = W * (0.5 + o.look);
+            vy = H * (0.46 - 0.3 * o.pitch);
+            cz = o.z;
+            ey =
+              EYE -
+              0.8 * o.crouch +
+              Math.sin(cz * 4.4) * 0.028 * (1 - o.crouch);
+            cx = Math.sin(cz * 2.2) * 0.05 + 0.1;
+            T = t;
+            const dusk = o.dusk;
+            g.clearRect(0, 0, W, H);
+            // langit-langit & lantai dasar
+            g.fillStyle = "#e9e3d2";
+            g.fillRect(0, 0, W, H);
+            const fl = g.createLinearGradient(0, vy, 0, H);
+            fl.addColorStop(0, dusk ? "#f2c58e" : "#f4dfb4");
+            fl.addColorStop(1, dusk ? "#b98a5a" : "#c9a577");
+            poly(
+              [
+                [-HW, 0, cz],
+                [HW, 0, cz],
+                [HW, 0, ZEND],
+                [-HW, 0, ZEND],
+              ],
+              fl,
+            );
+            // dinding dasar
+            const wl = g.createLinearGradient(0, 0, W, 0);
+            wl.addColorStop(0, "#d9b657");
+            wl.addColorStop(1, "#d9b657");
+            wall(-1, cz, ZEND, 0, HT, "#dcbb5c");
+            wall(1, cz, ZEND, 0, HT, "#ebcf74");
+            // dinding ujung + jendela hijau
+            poly(
+              [
+                [-HW, 0, ZEND],
+                [HW, 0, ZEND],
+                [HW, HT, ZEND],
+                [-HW, HT, ZEND],
+              ],
+              "#cfae56",
+            );
+            const wg = g.createLinearGradient(
+              0,
+              P(0, 2.5, ZEND)[1],
+              0,
+              P(0, 1, ZEND)[1],
+            );
+            wg.addColorStop(0, "#fffbe0");
+            wg.addColorStop(1, "#8fd08a");
+            poly(
+              [
+                [-1, 1, ZEND],
+                [1, 1, ZEND],
+                [1, 2.5, ZEND],
+                [-1, 2.5, ZEND],
+              ],
+              wg,
+            );
+            for (const bx of [-0.34, 0.34])
+              poly(
+                [
+                  [bx - 0.02, 1, ZEND],
+                  [bx + 0.02, 1, ZEND],
+                  [bx + 0.02, 2.5, ZEND],
+                  [bx - 0.02, 2.5, ZEND],
+                ],
+                "#6d5a2a",
+              );
+            // lantai: garis ubin, strip gelap, bercak matahari
+            const z0 = Math.max(0, Math.floor((cz - 1) / 1.2) * 1.2);
+            g.strokeStyle = "rgba(90,60,30,.16)";
+            g.lineWidth = Math.max(1, H / 420);
+            for (let z = z0; z < Math.min(ZEND, cz + 40); z += 1.2) {
+              if (z - cz < 0.25) continue;
+              const a = P(-HW, 0, z),
+                b = P(HW, 0, z);
+              g.beginPath();
+              g.moveTo(a[0], a[1]);
+              g.lineTo(b[0], b[1]);
+              g.stroke();
+            }
+            for (const sx of [-1, 1])
+              poly(
+                [
+                  [sx * 0.82, 0, cz],
+                  [sx * 0.96, 0, cz],
+                  [sx * 0.96, 0, ZEND],
+                  [sx * 0.82, 0, ZEND],
+                ],
+                "#403830",
+              );
+            // langit-langit: balok & lampu
+            const bz = Math.floor((cz - 1) / 3.5) * 3.5;
+            for (let z = bz + 3.5; z < Math.min(ZEND, cz + 45); z += 3.5) {
+              if (z - cz < 0.25) continue;
+              poly(
+                [
+                  [-HW, HT - 0.28, z + 0.35],
+                  [HW, HT - 0.28, z + 0.35],
+                  [HW, HT - 0.28, z],
+                  [-HW, HT - 0.28, z],
+                ],
+                "#e4dcc8",
+              );
+              poly(
+                [
+                  [-HW, HT - 0.28, z],
+                  [HW, HT - 0.28, z],
+                  [HW, HT, z],
+                  [-HW, HT, z],
+                ],
+                "#d6cfbb",
+              );
+            }
+            for (let z = bz + 5; z < Math.min(ZEND, cz + 45); z += 7) {
+              if (z - cz < 0.5) continue;
+              const a = P(0.2, HT, z),
+                b = P(0.2, HT - 0.35, z),
+                s = Math.max(2, (f * 0.04) / (z - cz));
+              g.strokeStyle = "#6c6f74";
+              g.lineWidth = Math.max(1, s * 0.3);
+              g.beginPath();
+              g.moveTo(a[0], a[1]);
+              g.lineTo(b[0], b[1]);
+              g.stroke();
+              g.fillStyle = "#fff6c8";
+              g.fillRect(b[0] - s, b[1], s * 2, s * 1.4);
+            }
+            // fitur dinding, dari jauh ke dekat
+            const kmax = Math.min(ZEND / 4, Math.ceil((cz + 45) / 4));
+            for (let k = kmax; k >= Math.floor(cz / 4) - 1; k--) {
+              const a = k * 4;
+              if (k % 2 === 0) {
+                door(-1, a + 1, a + 2.2, 2.4);
+                wall(-1, a + 1.1, a + 2.1, 2.55, 2.8, "#f0c45a");
+                wall(-1, a + 2.5, a + 3.3, 1.1, 2, "#f4efe0", 0.9);
+                wall(-1, a + 2.6, a + 3.2, 1.3, 1.9, "#d9602f", 0.9);
+              } else {
+                wall(-1, a + 0.6, a + 3.2, 0.95, 2.55, "#5f4f22");
+                const gl = g.createLinearGradient(0, 0, 0, H);
+                gl.addColorStop(0, "#fffbe3");
+                gl.addColorStop(1, "#cfe8c0");
+                wall(-1, a + 0.7, a + 3.1, 1.05, 2.45, gl);
+                for (let i = 0; i <= 8; i++)
+                  wall(
+                    -1,
+                    a + 0.7 + i * 0.3,
+                    a + 0.74 + i * 0.3,
+                    1.05,
+                    2.45,
+                    "#7a6a3a",
+                  );
+                wall(-1, a + 0.55, a + 3.25, 0.9, 0.97, "#3d3222");
+              }
+            }
+            const kmax2 = Math.min(ZEND / 3, Math.ceil((cz + 45) / 3));
+            for (let k = kmax2; k >= Math.floor(cz / 3) - 1; k--) {
+              const a = k * 3;
+              if (o.wallet && Math.abs(a + 0.9 - (o.wallet + 2.3)) < 1.2)
+                continue;
+              wall(1, a + 0.75, a + 2.15, 0, 2.6, "#7a6128", 0.55);
+              door(1, a + 1.05, a + 1.95, 2.4);
+              wall(1, a + 0.4, a + 1.5, 0.35, 2.75, "#fff0b0", 0.22);
+              poly(
+                [
+                  [HW, 0, a + 0.1],
+                  [HW, 0, a + 1.4],
+                  [0.15, 0, a + 0.8],
+                  [0.15, 0, a - 0.6],
+                ],
+                "#fff4be",
+                0.3,
+              );
+            }
+            if (o.wallet) {
+              // tangga di kanan
+              const a = o.wallet + 2.3;
+              wall(1, a, a + 2.4, 0, 2.7, "#2a2f3a");
+              wall(1, a + 0.1, a + 2.3, 2.7, 2.78, "#403830");
+              wall(1, a + 0.2, a + 2.2, 2.95, 3.3, "#f0c45a");
+              wtext(1, "Tangga", a + 0.3, a + 2.1, 2.95, 3.3, "#3a2c16");
+              for (let i = 0; i < 5; i++)
+                wall(
+                  1,
+                  a + 0.2 + i * 0.4,
+                  a + 0.5 + i * 0.4,
+                  0.15 * i,
+                  0.15 * i + 0.1,
+                  "#5d6270",
+                );
+            }
+            if (o.goal) {
+              // tanda Ruang Guru di kiri
+              const a = o.goal;
+              wall(-1, a - 0.3, a + 2.8, 2.5, 3.2, "#f0c45a");
+              wtext(-1, "Ruang Guru", a - 0.2, a + 2.7, 2.55, 3.15, "#3a2c16");
+            }
+            // kilau cahaya jendela ujung
+            const gg = g.createRadialGradient(vx, vy, 0, vx, vy, H * 0.55);
+            gg.addColorStop(0, "rgba(255,252,230,.55)");
+            gg.addColorStop(1, "rgba(255,252,230,0)");
+            g.fillStyle = gg;
+            g.fillRect(0, 0, W, H);
+            // pantulan lantai mengilap
+            const rf = g.createLinearGradient(0, vy, 0, vy + H * 0.25);
+            rf.addColorStop(0, "rgba(255,255,255,.35)");
+            rf.addColorStop(1, "rgba(255,255,255,0)");
+            poly(
+              [
+                [-HW, 0, cz + 0.2],
+                [HW, 0, cz + 0.2],
+                [HW, 0, ZEND],
+                [-HW, 0, ZEND],
+              ],
+              rf,
+            );
+            // dompet
+            o.q = null;
+            if (o.wallet && o.walletOn && (o.hold > 0 || o.wallet - cz > 0.5)) {
+              let q = P(1.05, 0, o.wallet),
+                s = (f * 0.36) / Math.max(0.5, o.wallet - cz);
+              const hd = o.hold;
+              q = [lerp(q[0], W * 0.5, hd), lerp(q[1], H * 0.8, hd)];
+              s = lerp(s, H * 0.34, hd);
+              o.q = [q[0], q[1], s];
+              if (hd < 1) {
+                g.fillStyle = "rgba(0,0,0,.25)";
+                g.beginPath();
+                g.ellipse(q[0], q[1], s * 0.62, s * 0.14, 0, 0, 7);
+                g.fill();
+              }
+              if (o.bills > 0.02) {
+                const u = 1 - o.bills;
+                g.globalAlpha = o.bills;
+                g.fillStyle = "#88c27a";
+                g.fillRect(
+                  q[0] - s * 0.3 - u * s * 0.5,
+                  q[1] - s * 0.42 - u * s * 0.8,
+                  s * 0.5,
+                  s * 0.16,
+                );
+                g.globalAlpha = 1;
+              }
+              g.fillStyle = "#7a4a25";
+              g.strokeStyle = "#3a2210";
+              g.lineWidth = Math.max(1, s * 0.05);
+              g.beginPath();
+              g.roundRect(
+                q[0] - s * 0.5,
+                q[1] - s * 0.34,
+                s,
+                s * 0.34,
+                s * 0.06,
+              );
+              g.fill();
+              g.stroke();
+              g.strokeStyle = "#f2b04c";
+              g.lineWidth = Math.max(1.5, s * 0.06);
+              g.lineCap = "round";
+              g.globalAlpha = (0.55 + 0.45 * Math.sin(T * 4)) * (1 - hd);
+              g.beginPath();
+              g.moveTo(q[0] - s * 0.65, q[1] - s * 0.55);
+              g.lineTo(q[0] - s * 0.8, q[1] - s * 0.7);
+              g.moveTo(q[0], q[1] - s * 0.62);
+              g.lineTo(q[0], q[1] - s * 0.85);
+              g.moveTo(q[0] + s * 0.65, q[1] - s * 0.55);
+              g.lineTo(q[0] + s * 0.8, q[1] - s * 0.7);
+              g.stroke();
+              g.globalAlpha = 1;
+            }
+            // tangan & lengan POV mengayun
+            const sw = Math.sin(cz * 4.4) * H * 0.012;
+            for (const s of [-1, 1]) {
+              if (s === 1 && o.reach > 0.01) continue;
+              const x = W / 2 + s * W * 0.2,
+                y = H + sw * -s;
+              g.save();
+              g.translate(x, y);
+              g.rotate(s * -0.18);
+              g.fillStyle = "#f4f1ea";
+              g.beginPath();
+              g.roundRect(-H * 0.06, -H * 0.17, H * 0.12, H * 0.2, H * 0.03);
+              g.fill();
+              g.fillStyle = "#e0ac7e";
+              g.beginPath();
+              g.roundRect(-H * 0.05, -H * 0.24, H * 0.1, H * 0.09, H * 0.04);
+              g.fill();
+              g.restore();
+            }
+            // tangan kanan meraih / memegang dompet
+            if (o.reach > 0.01 && o.q) {
+              const sx = W * 0.82,
+                sy = H * 1.12;
+              const tx = o.q[0] + o.q[2] * 0.3 * o.hold,
+                ty = o.q[1] - o.q[2] * 0.1 + o.q[2] * 0.35 * o.hold;
+              const ex = lerp(sx, tx, o.reach),
+                ey2 = lerp(sy, ty, o.reach);
+              const mx = lerp(sx, ex, 0.62),
+                my = lerp(sy, ey2, 0.62);
+              g.lineCap = "round";
+              g.strokeStyle = "#f4f1ea";
+              g.lineWidth = H * 0.12;
+              g.beginPath();
+              g.moveTo(sx, sy);
+              g.lineTo(mx, my);
+              g.stroke();
+              g.strokeStyle = "#e0ac7e";
+              g.lineWidth = H * 0.08;
+              g.beginPath();
+              g.moveTo(mx, my);
+              g.lineTo(ex, ey2);
+              g.stroke();
+              g.fillStyle = "#e0ac7e";
+              g.beginPath();
+              g.arc(ex, ey2, H * 0.05, 0, 7);
+              g.fill();
+            }
+            // vinyet
+            const vg = g.createRadialGradient(
+              vx,
+              H * 0.45,
+              H * 0.45,
+              vx,
+              H * 0.45,
+              Math.max(W, H) * 0.75,
+            );
+            vg.addColorStop(0, "rgba(0,0,0,0)");
+            vg.addColorStop(1, "rgba(0,0,0,.5)");
+            g.fillStyle = vg;
+            g.fillRect(0, 0, W, H);
+          }
+          requestAnimationFrame(function loop(t) {
+            draw(t / 1000);
+            requestAnimationFrame(loop);
+          });
+          return {
+            o,
+            show(opt) {
+              Object.assign(
+                o,
+                {
+                  z: 0,
+                  wallet: null,
+                  goal: null,
+                  dusk: false,
+                  crouch: 0,
+                  pitch: 0,
+                  look: 0,
+                  reach: 0,
+                  hold: 0,
+                  bills: 1,
+                  walletOn: true,
+                },
+                opt,
+                { on: true },
+              );
+              cv.style.display = "block";
+            },
+            hide() {
+              o.on = false;
+              cv.style.display = "none";
+            },
+            walk(dur, z1) {
+              const z0 = o.z;
+              return tween(
+                dur,
+                (e) => {
+                  o.z = lerp(z0, z1, e);
+                },
+                lin,
+              );
+            },
+          };
+        })();
+
+        async function toCorridor(kind) {
+          fadeEl.classList.add("on");
+          hideCaption();
+          if (!(await wait(1.1))) return;
+          cardEl.innerHTML =
+            "Bel istirahat berbunyi.<small>Kamu keluar kelas dan berjalan di koridor.</small>";
+          cardEl.classList.add("show");
+          if (!(await wait(2.4))) return;
+          cardEl.classList.remove("show");
+          if (!(await wait(0.8))) return;
+          stage.classList.add("in-gate", "cinema");
+          $("gateScene").style.display = "none";
+          $("corridorScene").style.display = "none";
+          pov.show({ wallet: 24 });
+          fadeEl.classList.remove("on");
+          if (!(await wait(1.2))) return;
+          const mutter = {
+            own: '"Bagus lahh, aku dapat nilai 100!"',
+            peek: '"Aduh... kalau aja tadi aku nggak nyontek, pasti dapat nilai 100."',
+            blank:
+              '"Yah... kalau tadi aku mau mencoba, pasti nilainya tidak nol."',
+          }[kind];
+          setTimeout(() => {
+            if (state === "corridor") caption(mutter);
+          }, 1200);
+          state = "corridor";
+          if (!(await pov.walk(7, 12))) return;
+          hideCaption();
+          caption("Koridor mulai sepi...");
+          if (!(await pov.walk(5.5, 20.5))) return;
+          hideCaption();
+          caption("Di dekat tangga ada dompet cokelat tergeletak.");
+          if (
+            !(await Promise.all([
+              pov.walk(2.8, 21.2),
+              tween(2.8, (e) => {
+                pov.o.pitch = 0.5 * e;
+              }),
+            ]).then((r) => r.every(Boolean)))
+          )
+            return;
+          if (!(await wait(0.6))) return;
+          hideCaption();
+          caption("Uang menyembul dari dalamnya. Tidak ada yang melihat.");
+          if (!(await wait(2.6))) return;
+          hideCaption();
+          state = "wallet-ask";
+          walletChEl.classList.add("show");
+        }
+
+        /* ============ CERITA 4: dompet di koridor ============ */
+        const KX = 1246,
+          KY = 800,
+          KS = 1.25,
+          WS = 1.3,
+          BEND = { rot: 58, th: 64 };
+        const walletEl = $("walletG"),
+          billsEl = $("walletBillsG"),
+          sparkEl = $("walletSpark"),
+          walletChEl = $("walletChoices");
+
+        // posisi ujung tangan murid (lengan A) bila badan condong `rot` dan lengan terayun `th`
+        function handAt(x, y, s, face, rot, th) {
+          const d = face === "R" ? 1 : -1,
+            r = (rot * Math.PI) / 180,
+            t = ((th - rot) * Math.PI) / 180;
+          return {
+            x: x + d * (118 * s * Math.sin(r) + 52 * s * Math.sin(t)),
+            y: y - 118 * s * Math.cos(r) + 52 * s * Math.cos(t),
+          };
+        }
+        const HG = handAt(KX, KY, KS, "R", BEND.rot, BEND.th);
+        const setWallet = (x, y, s) =>
+          walletEl.setAttribute(
+            "transform",
+            `translate(${x.toFixed(1)} ${y.toFixed(1)}) scale(${s.toFixed(3)})`,
+          );
+        setWallet(HG.x, HG.y + 18 * WS, WS);
+
+        /* jongkok: lutut menekuk, pinggul turun & mundur, punggung condong, tangan meraih dompet */
+        const SQ = { dx: 95, lean: 48, drop: 40, back: 22, fa: -16, fb: -8 };
+        const D2R = Math.PI / 180;
+        function sqShoulder(c, x0) {
+          const L = SQ.lean * c * D2R,
+            hx = SQ.back * c,
+            d = SQ.drop * c;
+          return {
+            L,
+            hx,
+            d,
+            x: x0 + KS * 52 * Math.sin(L) - KS * hx,
+            y: KY + KS * (-66 + d - 52 * Math.cos(L)),
+          };
+        }
+        function sqTh(c, x0 = KX + SQ.dx) {
+          const sh = sqShoulder(c, x0);
+          const t = Math.atan2(HG.x - sh.x, HG.y - sh.y) / D2R;
+          return lerp(4, t + SQ.lean * c, c);
+        }
+        function sqPose(c, th, x0 = KX + SQ.dx) {
+          const sh = sqShoulder(c, x0);
+          if (th === undefined) th = sqTh(c, x0);
+          place(kid, x0, KY, KS, "R");
+          const hip = { x: sh.hx, y: -66 + sh.d };
+          [SQ.fa, SQ.fb].forEach((fx, i) => {
+            const l = kid.legs[i],
+              foot = { x: fx * c, y: -4 };
+            const vx = foot.x - hip.x,
+              vy = foot.y - hip.y,
+              D = Math.min(Math.hypot(vx, vy), 61.9);
+            const h = Math.sqrt(31 * 31 - (D / 2) * (D / 2));
+            const kx = hip.x + vx / 2 - (vy / D) * h,
+              ky = hip.y + vy / 2 + (vx / D) * h;
+            l.g.removeAttribute("transform");
+            l.orig.forEach((e) => (e.style.display = "none"));
+            l.grp.style.display = "";
+            const set = (n, p) =>
+              Object.entries(p).forEach(([k, v]) =>
+                n.setAttribute(k, v.toFixed(1)),
+              );
+            set(l.th, { x1: hip.x, y1: hip.y, x2: kx, y2: ky });
+            set(l.sh, { x1: kx, y1: ky, x2: foot.x, y2: foot.y });
+            set(l.shoe, { x: foot.x - 14 });
+          });
+          kid.up.setAttribute(
+            "transform",
+            `translate(${sh.hx.toFixed(1)} ${sh.d.toFixed(1)}) rotate(${(-SQ.lean * c).toFixed(1)} 0 -66)`,
+          );
+          rotAt(kid.aa, th);
+          rotAt(kid.ab, lerp(-4, 28, c));
+          const t = (th - SQ.lean * c) * D2R;
+          return {
+            x: sh.x + KS * 52 * Math.sin(t),
+            y: sh.y + KS * 52 * Math.cos(t),
+          };
+        }
+        function wlPose(c, th, x0) {
+          return sqPose(c, th, x0);
+        }
+        function wlHold(c, s, th) {
+          const h = sqPose(c, th);
+          setWallet(h.x, h.y + 18 * s, s);
+        }
+        function stepIn() {
+          return tween(
+            0.8,
+            (e) => {
+              const x = lerp(KX, KX + SQ.dx, e);
+              place(kid, x, KY, KS, "R");
+              walkPose(kid, x * 0.045, 28, 30);
+            },
+            lin,
+          );
+        }
+        async function walkAway(carry, x0 = KX) {
+          camTo({ cx: 850, cy: 560, w: 1100, h: 640 }, 0, 2.6);
+          return await tween(
+            4.2,
+            (e) => {
+              const x = lerp(x0, 380, e),
+                op = e > 0.72 ? 1 - (e - 0.72) / 0.28 : 1;
+              place(kid, x, KY, KS, "L");
+              walkPose(kid, x * 0.05, 28, 30);
+              kidOpacity(op);
+              if (carry) {
+                rotAt(kid.aa, 55);
+                const h = handAt(x, KY, KS, "L", 0, 55);
+                setWallet(h.x, h.y + 16, 0.9);
+                walletEl.setAttribute("opacity", op.toFixed(2));
+              }
+            },
+            lin,
+          );
+        }
+
+        function chooseWallet(k) {
+          if (state !== "wallet-ask") return;
+          state = "wallet-scene";
+          walletChEl.classList.remove("show");
+          ({ give: walletGive, take: walletTake, ignore: walletIgnore })[k]();
+        }
+
+        /* pilihan 1: serahkan ke ruang guru */
+        async function wlPick() {
+          if (!(await tween(1.0, (e) => wlPose(e, lerp(4, 10, e)))))
+            return false;
+          if (!(await wait(0.45))) return false;
+          if (!(await tween(0.8, (e) => wlPose(1, lerp(10, sqTh(1), e)))))
+            return false;
+          sparkEl.style.display = "none";
+          return await tween(0.4, (e) =>
+            wlPose(1, sqTh(1) + 7 * Math.sin(Math.PI * e)),
+          );
+        }
+        /* ---- versi POV: mengambil dompet dari sudut pandang sendiri ---- */
+        const both = async (...p) => (await Promise.all(p)).every(Boolean);
+        async function povPick() {
+          const o = pov.o;
+          if (
+            !(await both(
+              pov.walk(1.1, 22.4),
+              tween(1.1, (e) => {
+                o.pitch = lerp(0.5, 0.65, e);
+              }),
+            ))
+          )
+            return false;
+          if (
+            !(await tween(0.9, (e) => {
+              o.crouch = e;
+            }))
+          )
+            return false;
+          return await tween(0.8, (e) => {
+            o.reach = e;
+          });
+        }
+        const povLift = () =>
+          tween(1.2, (e) => {
+            const o = pov.o;
+            o.hold = e;
+            o.crouch = 1 - e;
+            o.pitch = lerp(0.65, 0.25, e);
+          });
+        const povWalkOff = (z, from) =>
+          both(
+            pov.walk(4.4, z),
+            tween(1, (e) => {
+              pov.o.pitch = lerp(from, 0, e);
+            }),
+          );
+
+        async function walletGive() {
+          const o = pov.o;
+          hideCaption();
+          if (!(await povPick())) return;
+          caption("Kamu memungut dompet itu.");
+          if (!(await povLift())) return;
+          if (!(await wait(0.5))) return;
+          caption("Kamu membawanya ke ruang guru.");
+          o.goal = 30;
+          if (!(await povWalkOff(29, 0.25))) return;
+          o.walletOn = false;
+          caption("Dompetnya sudah kamu serahkan. Rasanya lega.");
+          if (
+            !(await tween(0.8, (e) => {
+              o.reach = 1 - e;
+            }))
+          )
+            return;
+          if (!(await wait(2.2))) return;
+          award("dompet", "give");
+          toBell();
+        }
+
+        async function walletTake() {
+          const o = pov.o;
+          hideCaption();
+          if (!(await povPick())) return;
+          caption("Tidak ada yang melihat... uangnya kamu ambil.");
+          if (!(await povLift())) return;
+          if (
+            !(await tween(
+              0.8,
+              (e) => {
+                o.bills = 1 - e;
+              },
+              lin,
+            ))
+          )
+            return;
+          caption("Lalu dompetnya kamu taruh kembali.");
+          if (
+            !(await tween(1.1, (e) => {
+              o.hold = 1 - e;
+              o.crouch = e;
+              o.pitch = lerp(0.25, 0.65, e);
+            }))
+          )
+            return;
+          if (
+            !(await tween(1, (e) => {
+              o.reach = 1 - e;
+              o.crouch = 1 - e;
+              o.pitch = lerp(0.65, 0.3, e);
+            }))
+          )
+            return;
+          if (!(await wait(1.2))) return;
+          caption("Kamu pergi, seolah tidak terjadi apa-apa.");
+          if (!(await povWalkOff(28, 0.3))) return;
+          if (!(await wait(1.6))) return;
+          award("dompet", "take");
+          toBell();
+        }
+
+        /* pilihan 3: biarkan saja */
+        async function walletIgnore() {
+          const o = pov.o;
+          hideCaption();
+          caption("Kamu melirik dompet itu...");
+          if (
+            !(await tween(1.8, (e) => {
+              const k = Math.sin(Math.PI * e);
+              o.pitch = 0.5 + 0.25 * k;
+              o.look = -0.05 * k;
+            }))
+          )
+            return;
+          hideCaption();
+          caption("...lalu pura-pura tidak melihat dan berjalan pergi.");
+          if (!(await povWalkOff(28, 0.5))) return;
+          hideCaption();
+          caption("Dompet itu tetap tergeletak di sana.");
+          if (!(await wait(3))) return;
+          award("dompet", "ignore");
+          toBell();
+        }
+
+        walletChEl.addEventListener("click", (e) => {
+          const b = e.target.closest(".choice");
+          if (b) chooseWallet(b.dataset.w);
+        });
+
+        /* ============ CERITA 5: dipanggil guru ============ */
+        function enterCorridor() {
+          stage.classList.add("in-gate", "cinema");
+          $("gateScene").style.display = "none";
+          $("roomScene").style.display = "none";
+          $("corridorScene").style.display = "";
+          gsvg.appendChild(kid.g);
+          kidOpacity(1);
+          idlePose(kid);
+          Object.assign(cam, CAM.corridor);
+          par = 0;
+        }
+
+        function buildRoom() {
+          const bills =
+            story.dompet === "take" ? "" : '<use href="#walletBills"/>';
+          let r = `<rect x="-800" y="-600" width="4000" height="1900" fill="#f6efdc"/>`;
+          r += `<rect x="-800" y="-600" width="4000" height="896" fill="#1f2d3d"/><rect x="-800" y="296" width="4000" height="10" fill="#f2b04c"/>`;
+          r += `<rect x="650" y="322" width="300" height="48" rx="8" fill="#f2b04c" stroke="#1f2d3d" stroke-width="4"/>`;
+          r += `<text x="800" y="358" text-anchor="middle" font-size="32" fill="#1f2d3d" font-family="${HAND}">Ruang Guru</text>`;
+          // jendela
+          r += `<rect x="170" y="340" width="220" height="250" fill="#f2b04c" stroke="#1f2d3d" stroke-width="6"/>`;
+          r += `<line x1="280" y1="340" x2="280" y2="590" stroke="#1f2d3d" stroke-width="5"/><line x1="170" y1="465" x2="390" y2="465" stroke="#1f2d3d" stroke-width="5"/>`;
+          r += `<rect x="156" y="590" width="248" height="14" fill="#1f2d3d"/>`;
+          // papan pengumuman
+          r += `<rect x="1170" y="350" width="270" height="230" fill="none" stroke="#1f2d3d" stroke-width="6"/>`;
+          r += `<rect x="1196" y="376" width="70" height="86" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3.5"/>`;
+          r += `<rect x="1290" y="372" width="64" height="70" fill="#f6efdc" stroke="#1f2d3d" stroke-width="3.5"/>`;
+          r += `<rect x="1376" y="384" width="42" height="96" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3.5"/>`;
+          r += `<rect x="1210" y="486" width="120" height="64" fill="#f6efdc" stroke="#1f2d3d" stroke-width="3.5"/>`;
+          r += `<g stroke="#1f2d3d" stroke-width="3" stroke-linecap="round"><line x1="1222" y1="506" x2="1318" y2="506"/><line x1="1222" y1="522" x2="1300" y2="522"/><line x1="1222" y1="538" x2="1280" y2="538"/></g>`;
+          // lantai
+          r += `<rect x="-800" y="772" width="4000" height="14" fill="#1f2d3d"/><rect x="-800" y="786" width="4000" height="900" fill="#1f2d3d" opacity=".14"/>`;
+          for (let x = -800; x < 2400; x += 210)
+            r += `<line x1="${x}" y1="786" x2="${x}" y2="1500" stroke="#1f2d3d" stroke-opacity=".12" stroke-width="3"/>`;
+          // Bu Guru
+          r += `<g id="buGuru">`;
+          r += `<line x1="752" y1="548" x2="722" y2="630" stroke="#1f2d3d" stroke-width="24" stroke-linecap="round"/><line x1="848" y1="548" x2="878" y2="630" stroke="#1f2d3d" stroke-width="24" stroke-linecap="round"/>`;
+          r += `<path d="M740 700 Q738 536 800 526 Q862 536 860 700 Z" fill="#1f2d3d"/>`;
+          r += `<polygon points="778,526 800,556 822,526" fill="#f6efdc"/><rect x="790" y="504" width="20" height="24" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3"/>`;
+          r += `<circle cx="722" cy="638" r="12" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3"/><circle cx="878" cy="638" r="12" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3"/>`;
+          r += `<circle cx="800" cy="414" r="22" fill="#1f2d3d"/>`;
+          r += `<circle cx="800" cy="472" r="42" fill="#f2b04c" stroke="#1f2d3d" stroke-width="4"/>`;
+          r += `<path d="M758 470 C752 418 848 418 842 470 C828 446 772 446 758 470 Z" fill="#1f2d3d"/>`;
+          r += `<g fill="none" stroke="#1f2d3d" stroke-width="3"><circle cx="786" cy="476" r="10"/><circle cx="814" cy="476" r="10"/><line x1="796" y1="476" x2="804" y2="476"/></g>`;
+          r += `<circle cx="786" cy="476" r="2.6" fill="#1f2d3d"/><circle cx="814" cy="476" r="2.6" fill="#1f2d3d"/>`;
+          r += `<path d="M784 497 q16 15 32 0" stroke="#1f2d3d" stroke-width="3.5" fill="none" stroke-linecap="round"/>`;
+          r += `</g>`;
+          // meja
+          r += `<rect x="540" y="640" width="520" height="26" fill="#f2b04c" stroke="#1f2d3d" stroke-width="4"/>`;
+          r += `<rect x="560" y="666" width="480" height="114" fill="#1f2d3d"/><rect x="600" y="690" width="170" height="70" fill="none" stroke="#f6efdc" stroke-opacity=".35" stroke-width="3"/><rect x="830" y="690" width="170" height="70" fill="none" stroke="#f6efdc" stroke-opacity=".35" stroke-width="3"/>`;
+          // barang di meja
+          r += `<rect x="570" y="612" width="100" height="28" fill="#f2b04c" stroke="#1f2d3d" stroke-width="3.5"/><rect x="578" y="588" width="84" height="24" fill="#f6efdc" stroke="#1f2d3d" stroke-width="3.5"/>`;
+          r += `<rect x="1018" y="604" width="30" height="36" rx="4" fill="#f6efdc" stroke="#1f2d3d" stroke-width="3.5"/><path d="M1048 612 q14 4 0 16" fill="none" stroke="#1f2d3d" stroke-width="3.5"/>`;
+          r += `<g transform="translate(950 640) scale(1.1)">${bills}<use href="#walletBody"/></g>`;
+          // kartu tertutup
+          r +=
+            `<g id="deskCard" transform="translate(800 640)"><rect x="-46" y="-72" width="92" height="72" rx="8" fill="#f2b04c" stroke="#1f2d3d" stroke-width="4"/>` +
+            `<rect x="-37" y="-63" width="74" height="54" rx="4" fill="none" stroke="#1f2d3d" stroke-width="2.5" stroke-dasharray="6 5"/>` +
+            `<text x="0" y="-22" text-anchor="middle" font-size="46" fill="#1f2d3d" font-family="${HAND}">?</text></g>`;
+          $("roomScene").innerHTML = r;
+        }
+
+        async function toBell() {
+          state = "bell";
+          hideCaption();
+          fadeEl.classList.add("on");
+          if (!(await wait(1.1))) return;
+          cardEl.innerHTML =
+            "Bel pulang berbunyi.<small>Langit mulai jingga. Sekolah hampir kosong.</small>";
+          cardEl.classList.add("show");
+          if (!(await wait(2.6))) return;
+          cardEl.classList.remove("show");
+          if (!(await wait(0.8))) return;
+          walletEl.style.display = "none";
+          enterCorridor();
+          $("corridorScene").style.display = "none";
+          pov.show({ dusk: true, goal: 27 });
+          stage.classList.add("dusk-on");
+          fadeEl.classList.remove("on");
+          if (!(await wait(1.2))) return;
+          state = "to-teacher";
+          caption(
+            'Pengeras suara: "Murid yang duduk di meja paling depan, tolong ke ruang guru sebentar."',
+          );
+          if (!(await pov.walk(5.5, 13))) return;
+          hideCaption();
+          caption(
+            "Kamu berjalan di koridor yang kosong dengan perasaan campur aduk.",
+          );
+          if (!(await pov.walk(5, 26))) return;
+          idlePose(kid);
+          hideCaption();
+          fadeEl.classList.add("on");
+          if (!(await wait(1.1))) return;
+
+          // ruang guru
+          buildRoom();
+          pov.hide();
+          $("corridorScene").style.display = "none";
+          $("roomScene").style.display = "";
+          Object.assign(cam, CAM.room);
+          place(kid, -140, 900, 1.5, "R");
+          fadeEl.classList.remove("on");
+          if (!(await wait(0.9))) return;
+          if (
+            !(await tween(
+              3.2,
+              (e) => {
+                const x = lerp(-140, 430, e);
+                place(kid, x, 900, 1.5, "R");
+                walkPose(kid, x * 0.05, 28, 30);
+              },
+              lin,
+            ))
+          )
+            return;
+          idlePose(kid);
+          state = "teacher";
+          camTo(CAM.deskCard, 0, 2.4);
+          caption("Di meja guru ada kartu kecil yang tertutup.");
+          if (!(await wait(3))) return;
+          caption(
+            "Di sebelahnya, ada dompet cokelat yang terasa tidak asing...",
+          );
+          if (!(await wait(3.2))) return;
+          caption('Bu Guru tersenyum: "Ibu mau kasih ini."');
+          if (!(await wait(2.6))) return;
+          caption('"Sebenarnya, kamu itu orangnya seperti apa, ya?"');
+          if (!(await wait(3.4))) return;
+          hideCaption();
+          showReveal();
+        }
+
+        /* ---------- penilaian karakter ---------- */
+        const TRAITS = [
+          ["disiplin", "Disiplin"],
+          ["jujur", "Kejujuran"],
+          ["tanggung", "Tanggung Jawab"],
+          ["peduli", "Kepedulian"],
+        ];
+        const NOTES = {
+          gate: {
+            climb:
+              "Pagi tadi Ibu lihat kamu memanjat pagar. Berani, tapi lain kali bicara saja ke Pak Satpam.",
+            tell: "Pagi tadi kamu berani mengaku terlambat kepada Pak Satpam. Itu tidak mudah.",
+            back: "Pagi tadi kamu menyelinap lewat pintu belakang. Ibu tahu, lho.",
+          },
+          kelas: {
+            now: "Tugasmu kamu kerjakan dan kumpulkan tepat waktu.",
+            later: "Tugasmu hampir saja terlewat karena kamu tunda.",
+            skip: "Tugasmu tidak kamu kerjakan sama sekali.",
+          },
+          ulangan: {
+            own: "Di ulangan, kamu menjawab dengan usahamu sendiri.",
+            peek: "Di ulangan, kamu menyalin jawaban temanmu.",
+            blank: "Di ulangan, kamu menyerah sebelum mencoba.",
+          },
+          dompet: {
+            give: "Dompet cokelat di dekat tangga itu milik Ibu, sengaja Ibu taruh di sana. Kamu menyerahkannya dengan utuh. Terima kasih.",
+            take: "Dompet cokelat di dekat tangga itu milik Ibu, sengaja Ibu taruh di sana. Uangnya berkurang, dan Ibu tahu siapa yang lewat.",
+            ignore:
+              "Dompet cokelat di dekat tangga itu milik Ibu, sengaja Ibu taruh di sana. Kamu melihatnya, tapi memilih pura-pura tidak tahu.",
+          },
+        };
+        const HOMEWORK = {
+          disiplin: "PR-mu: lebih tertib mengatur waktu.",
+          jujur: "PR-mu: tetap jujur walau tidak ada yang melihat.",
+          tanggung: "PR-mu: selesaikan apa yang menjadi tanggung jawabmu.",
+          peduli: "PR-mu: lebih peka pada barang dan perasaan orang lain.",
+        };
+        function traitNorm(k) {
+          let lo = 0,
+            hi = 0;
+          Object.values(POINTS).forEach((g) => {
+            const v = Object.values(g).map((o) => o[k] || 0);
+            lo += Math.min(...v);
+            hi += Math.max(...v);
+          });
+          return hi === lo ? 0.5 : clamp01((score[k] - lo) / (hi - lo));
+        }
+        function evaluate() {
+          const ks = TRAITS.map((t) => t[0]),
+            label = (k) => TRAITS.find((t) => t[0] === k)[1];
+          const n = {};
+          ks.forEach((k) => (n[k] = traitNorm(k)));
+          const hi = ks.filter((k) => n[k] >= 0.7),
+            lo = ks.filter((k) => n[k] <= 0.35);
+          const top = ks.reduce((a, b) => (n[b] > n[a] ? b : a));
+          const bot = ks.reduce((a, b) => (n[b] < n[a] ? b : a));
+          let title;
+          if (ks.every((k) => n[k] >= 0.75)) title = "Murid Teladan";
+          else if (n.jujur <= 0.35)
+            title =
+              lo.length >= 3
+                ? "Si Jago Cari Celah"
+                : hi.length >= 2
+                  ? "Si Pintar yang Suka Jalan Pintas"
+                  : "Si Pencari Jalan Pintas";
+          else if (story.dompet === "take")
+            title =
+              hi.length >= 2
+                ? "Si Baik yang Sempat Tergoda"
+                : "Si Pencari Jalan Pintas";
+          else if (lo.length >= 3) title = "Si Santai Sejati";
+          else if (lo.length === 1 && hi.length >= 2)
+            title = {
+              peduli: "Si Rajin yang Kurang Peka",
+              disiplin: "Si Baik yang Sering Terlambat",
+              tanggung: "Si Baik yang Suka Menunda",
+            }[lo[0]];
+          else if (n.jujur >= 0.7 && n.peduli >= 0.7) title = "Penjaga Amanah";
+          else if (n.jujur >= 0.7 && n.disiplin >= 0.7) title = "Si Lurus Hati";
+          else if (n.tanggung >= 0.7 && n.disiplin >= 0.7)
+            title = "Si Andalan Kelas";
+          else if (n.tanggung >= 0.7 && n.peduli >= 0.7)
+            title = "Si Hati Hangat";
+          else if (n[top] < 0.6) title = "Murid yang Sedang Bertumbuh";
+          else
+            title = {
+              disiplin: "Si Tertib",
+              jujur: "Si Jujur",
+              tanggung: "Si Bertanggung Jawab",
+              peduli: "Si Peduli",
+            }[top];
+
+          const pr = story.dompet === "take" ? "jujur" : bot;
+          const closing = ks.every((k) => n[k] >= 0.75)
+            ? "Pertahankan, ya. Ibu bangga padamu."
+            : HOMEWORK[pr];
+          const note = [
+            NOTES.gate[story.gate],
+            NOTES.kelas[story.kelas],
+            NOTES.ulangan[story.ulangan],
+            NOTES.dompet[story.dompet],
+            closing,
+          ]
+            .filter(Boolean)
+            .join(" ");
+          const sub = ks.every((k) => n[k] >= 0.75)
+            ? "Keempat sifatmu sama-sama kuat."
+            : "Paling kuat: " +
+              label(top) +
+              (bot !== top && n[bot] < 0.7
+                ? " \u00b7 Perlu dilatih: " + label(bot)
+                : "");
+          return {
+            title,
+            sub,
+            note,
+            bars: TRAITS.map(([k, l]) => ({
+              label: l,
+              pct: Math.max(6, Math.round(n[k] * 100)),
+            })),
+          };
+        }
+
+        const revealEl = $("reveal");
+        async function showReveal() {
+          state = "final";
+          stage.classList.remove("cinema");
+          hideCaption();
+          const r = evaluate();
+          $("rTitle").textContent = r.title;
+          $("rSub").textContent = r.sub;
+          $("rNote").textContent = r.note;
+          $("rBars").innerHTML = r.bars
+            .map(
+              (b) =>
+                `<div class="trait"><span>${b.label}</span><i><b data-w="${b.pct}"></b></i></div>`,
+            )
+            .join("");
+          revealEl.classList.add("show");
+          if (!(await wait(1.6))) return;
+          revealEl.classList.add("flipped");
+          if (!(await wait(1.2))) return;
+          revealEl.querySelectorAll("b[data-w]").forEach((b) => {
+            b.style.width = b.dataset.w + "%";
+          });
+        }
+        $("rAgain").addEventListener("click", () => {
+          location.hash = "";
+          location.reload();
+        });
+
+        examChEl.addEventListener("click", (e) => {
+          const b = e.target.closest(".choice");
+          if (b) chooseExam(b.dataset.e);
+        });
+        againEl.addEventListener("click", () => {
+          location.hash = "";
+          location.reload();
+        });
+
+        /* ---------- input ---------- */
+        function choose(k) {
+          if (state !== "ask") return;
+          ({ now: sceneNow, later: sceneLater, skip: sceneSkip })[k]();
+        }
+        choicesEl.addEventListener("click", (e) => {
+          const b = e.target.closest(".choice");
+          if (b) choose(b.dataset.k);
+        });
+        addEventListener("keydown", (e) => {
+          if (state === "gate-ask") {
+            const m = { 1: "climb", 2: "tell", 3: "back" }[e.key];
+            if (m) chooseGate(m);
+            return;
+          }
+          if (state === "exam-ask") {
+            const m = { 1: "own", 2: "peek", 3: "blank" }[e.key];
+            if (m) chooseExam(m);
+            return;
+          }
+          if (state === "wallet-ask") {
+            const m = { 1: "give", 2: "take", 3: "ignore" }[e.key];
+            if (m) chooseWallet(m);
+            return;
+          }
+          if (e.key === "1") choose("now");
+          else if (e.key === "2") choose("later");
+          else if (e.key === "3") choose("skip");
+        });
+
+        /* ---------- loop utama ---------- */
+        let last = performance.now();
+        function frame(now) {
+          const dt = Math.min(0.1, (now - last) / 1000);
+          last = now;
+          clock.sec += dt * clock.f;
+          if (state === "gate-ask") {
+            const t = now / 1000;
+            place(kid, 930, 880 + Math.sin(t * 7) * 1.8, 1.2, "L");
+            idlePose(kid, t * 7);
+            idlePose(guard, t * 2);
+          } else if (state === "wallet-ask") {
+            const t = now / 1000;
+            place(kid, KX, KY + Math.sin(t * 7) * 1.8, KS, "R");
+            idlePose(kid, t * 7);
+          }
+          renderClock();
+          renderCam(now / 1000);
+          requestAnimationFrame(frame);
+        }
+        renderParallax();
+        requestAnimationFrame(frame);
+
+        /* ---------- pembuka ---------- */
+        if (location.hash === "#kelas") enterClass();
+        else if (location.hash === "#ulangan") toExam();
+        else if (location.hash === "#dompet") toCorridor("own");
+        else if (location.hash === "#guru") {
+          award("gate", "tell");
+          award("kelas", "now");
+          award("ulangan", "own");
+          award("dompet", "give");
+          toBell();
+        } else gateStart();
+      })();
+    </script>
+  </body>
+</html>
